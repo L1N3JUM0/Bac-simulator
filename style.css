@@ -1,0 +1,742 @@
+/* ============================================================================
+   SimuBac — style.css
+   ----------------------------------------------------------------------------
+   Direction visuelle « Encre & Copie » : l'application emprunte au monde de la
+   copie d'examen — papier clair, encre bleue de stylo, marge qui code le
+   statut de chaque note :
+     · marge PLEINE bleue      = note acquise (épreuve passée, bulletin validé)
+     · marge POINTILLÉE        = note projetée (hypothèse de Terminale)
+     · marge TIRETÉE grise     = épreuve à venir, non renseignée
+   Mobile-first, aucune bibliothèque. Grid pour les tableaux, Flexbox pour les
+   formulaires. Deux thèmes : « Copie » (clair) et « Ardoise » (sombre).
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   1. VARIABLES DE THÈME
+   --------------------------------------------------------------------------- */
+:root {
+  /* Thème clair « Copie » */
+  --bg:            #F4F6FA;   /* papier */
+  --surface:       #FFFFFF;   /* cartes */
+  --surface-2:     #EDF0F7;   /* zones secondaires */
+  --ink:           #182046;   /* texte principal — bleu-noir d'encre */
+  --ink-2:         #5B6486;   /* texte secondaire */
+  --accent:        #2B49C3;   /* bleu stylo */
+  --accent-ink:    #FFFFFF;   /* texte sur accent */
+  --accent-soft:   #E7ECFB;   /* fond bleu très pâle */
+  --marge:         #D9536B;   /* rouge de marge — erreurs, abandon */
+  --ok:            #1E8A5A;   /* vert — objectifs atteints */
+  --warn:          #A9741B;   /* ocre — vigilance */
+  --gold:          #B98A1F;   /* mention Très Bien */
+  --line:          #E2E6F0;   /* filets */
+  --shadow:        0 6px 24px rgba(24, 32, 70, 0.08);
+  --shadow-sm:     0 2px 8px  rgba(24, 32, 70, 0.06);
+
+  /* Géométrie & rythme */
+  --radius:        18px;
+  --radius-sm:     12px;
+  --gap:           16px;
+  --maxw:          720px;
+  --marge-w:       4px;       /* épaisseur de la marge de copie */
+
+  /* Typographie : piles système → rendu natif, hors-ligne garanti */
+  --font-ui:  system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-num: ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+
+  --transition: 180ms cubic-bezier(.4, 0, .2, 1);
+
+  color-scheme: light;
+}
+
+/* Thème sombre « Ardoise » — appliqué :
+   1. automatiquement si data-theme="auto" et préférence système sombre ;
+   2. manuellement si data-theme="sombre".                                    */
+[data-theme="sombre"] { color-scheme: dark; }
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] { color-scheme: dark; }
+}
+
+[data-theme="sombre"],
+:root:has([data-theme]) { /* garde-fou : ne rien casser si :has non supporté */ }
+
+[data-theme="sombre"] {
+  --bg:          #0E1220;
+  --surface:     #181D30;
+  --surface-2:   #212843;
+  --ink:         #E8EBF7;
+  --ink-2:       #98A1C2;
+  --accent:      #8CA0F4;
+  --accent-ink:  #0E1220;
+  --accent-soft: #232C4E;
+  --marge:       #EF8299;
+  --ok:          #4CC38F;
+  --warn:        #D9A94A;
+  --gold:        #E0B54E;
+  --line:        #2A314D;
+  --shadow:      0 6px 24px rgba(0, 0, 0, 0.35);
+  --shadow-sm:   0 2px 8px  rgba(0, 0, 0, 0.30);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --bg:          #0E1220;
+    --surface:     #181D30;
+    --surface-2:   #212843;
+    --ink:         #E8EBF7;
+    --ink-2:       #98A1C2;
+    --accent:      #8CA0F4;
+    --accent-ink:  #0E1220;
+    --accent-soft: #232C4E;
+    --marge:       #EF8299;
+    --ok:          #4CC38F;
+    --warn:        #D9A94A;
+    --gold:        #E0B54E;
+    --line:        #2A314D;
+    --shadow:      0 6px 24px rgba(0, 0, 0, 0.35);
+    --shadow-sm:   0 2px 8px  rgba(0, 0, 0, 0.30);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   2. BASE & RESET LÉGER
+   --------------------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  min-height: 100dvh;
+  /* Réserve pour le bandeau sticky en bas + encoches iOS */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
+h1, h2, h3, p, ul, ol, fieldset { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+fieldset { border: 0; padding: 0; }
+button { font: inherit; color: inherit; }
+img, canvas { max-width: 100%; }
+
+/* Tous les nombres (notes, points, coefs) en chiffres tabulaires :
+   ils restent alignés quand les valeurs changent en direct. */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Focus clavier toujours visible (accessibilité) */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Respect de prefers-reduced-motion : plus aucune animation */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   3. EN-TÊTE & STEPPER
+   --------------------------------------------------------------------------- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-header__inner {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 10px var(--gap);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* Pastille « /20 » : identité de l'app */
+.brand__badge {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-num);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.btn-icon:hover { background: var(--surface-2); }
+.btn-icon__glyph { font-size: 18px; }
+
+/* Fil d'étapes horizontal, défilable sur mobile */
+.stepper { border-top: 1px solid var(--line); }
+.stepper__list {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 6px var(--gap);
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stepper__list::-webkit-scrollbar { display: none; }
+
+.stepper__item button {
+  border: 0;
+  background: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.stepper__item.is-active button {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.stepper__item.is-done button { color: var(--ink); }
+
+/* ----------------------------------------------------------------------------
+   4. STRUCTURE DES ÉCRANS
+   --------------------------------------------------------------------------- */
+.app-main {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 20px var(--gap) 32px;
+}
+
+/* Apparition discrète de chaque écran */
+.ecran { animation: ecran-in 260ms ease both; }
+@keyframes ecran-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ecran__title {
+  font-size: clamp(24px, 5vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.ecran__sub { color: var(--ink-2); margin-bottom: 18px; }
+
+/* Sur-titre en petites capitales : structure les cartes */
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+  margin-bottom: 10px;
+}
+
+/* ----------------------------------------------------------------------------
+   5. CARTES
+   --------------------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+  margin-bottom: var(--gap);
+}
+.card--flat { box-shadow: none; }
+.card__note { color: var(--ink-2); font-size: 14px; margin-bottom: 12px; }
+
+/* Carte héro de l'accueil */
+.card--hero {
+  padding: 28px 22px;
+  box-shadow: var(--shadow);
+}
+.hero__title {
+  font-size: clamp(32px, 8vw, 44px);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 6px 0 12px;
+}
+.hero__lead { color: var(--ink-2); max-width: 46ch; }
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+.hero__disclaimer {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+/* Cartes statistiques de l'accueil */
+.card--stat { text-align: center; padding: 16px 10px; margin-bottom: 0; }
+.stat__value {
+  font-family: var(--font-num);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.stat__unit { font-size: 15px; color: var(--ink-2); font-weight: 700; }
+.stat__label { font-size: 12.5px; color: var(--ink-2); line-height: 1.3; }
+
+/* ----------------------------------------------------------------------------
+   6. GRILLES UTILITAIRES (CSS Grid)
+   --------------------------------------------------------------------------- */
+.grid { display: grid; gap: var(--gap); }
+.grid--3 { grid-template-columns: repeat(3, 1fr); }
+.grid--2 { grid-template-columns: 1fr; }
+
+@media (min-width: 640px) {
+  .grid--2 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 420px) {
+  .grid--3 { grid-template-columns: 1fr; }
+}
+
+/* ----------------------------------------------------------------------------
+   7. BOUTONS
+   --------------------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 11px 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition), background var(--transition),
+              box-shadow var(--transition);
+}
+.btn:active { transform: scale(0.98); }
+.btn--lg { padding: 14px 22px; font-size: 17px; }
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-sm);
+}
+.btn--primary:hover { box-shadow: var(--shadow); }
+.btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn--ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.btn--ghost:hover { background: var(--surface-2); }
+
+.btn--danger {
+  background: transparent;
+  color: var(--marge);
+  border-color: color-mix(in srgb, var(--marge) 40%, transparent);
+}
+.btn--danger:hover { background: color-mix(in srgb, var(--marge) 10%, transparent); }
+
+.btn__meta { font-size: 12px; font-weight: 500; opacity: 0.75; }
+
+.form__nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* ----------------------------------------------------------------------------
+   8. FORMULAIRES : CHAMPS, CHIPS, ONGLETS, INTERRUPTEUR
+   --------------------------------------------------------------------------- */
+.form { display: flex; flex-direction: column; gap: 16px; }
+.form__row--2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 560px) {
+  .form__row--2 { grid-template-columns: 1fr 1fr; }
+}
+
+.field label, .field legend {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.field__hint { font-weight: 500; color: var(--ink-2); }
+
+input[type="text"], select {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  transition: border-color var(--transition);
+}
+input[type="text"]:focus, select:focus { border-color: var(--accent); outline: none; }
+
+/* Message d'erreur accessible (relié via aria-describedby à l'étape 3) */
+.field__error {
+  color: var(--marge);
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+/* Chips : sélection de spécialités, options, objectif.
+   L'input reste dans le DOM (accessibilité clavier + lecteurs d'écran),
+   masqué visuellement, l'état est porté par le <span>. */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; }
+.chip input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.chip span {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.25;
+  transition: background var(--transition), border-color var(--transition),
+              color var(--transition);
+}
+.chip small { font-size: 11px; font-weight: 500; color: var(--ink-2); }
+.chip input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.chip input:checked + span small { color: inherit; opacity: 0.8; }
+.chip input:focus-visible + span {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Chips « abandon » : rouge de marge */
+.chip--danger input:checked + span {
+  background: color-mix(in srgb, var(--marge) 12%, transparent);
+  border-color: var(--marge);
+  color: var(--marge);
+}
+.chip--disabled span { opacity: 0.45; }
+
+/* Onglets de l'écran Notes */
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+.tab {
+  flex: 1;
+  border: 0;
+  padding: 9px 6px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2);
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.tab.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Interrupteur « moyenne ↔ trimestres » */
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; }
+.switch__track {
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  position: relative;
+  transition: background var(--transition);
+}
+.switch__track::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition);
+}
+.switch input:checked + .switch__track { background: var(--accent); }
+.switch input:checked + .switch__track::after { transform: translateX(18px); }
+.switch input:focus-visible + .switch__track {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.switch__label { font-size: 14px; font-weight: 600; }
+
+/* ----------------------------------------------------------------------------
+   9. LIGNES DE NOTES — la « marge de copie » code le statut
+   --------------------------------------------------------------------------- */
+.note-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-left: var(--marge-w) solid transparent; /* la marge */
+}
+/* Acquis : marge d'encre pleine */
+.note-row--acquis   { border-left-color: var(--accent); }
+/* Projeté (hypothèse Terminale) : marge pointillée */
+.note-row--projete  {
+  border-left: none;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    repeating-linear-gradient(180deg, var(--accent) 0 6px, transparent 6px 12px) border-box;
+  border-left: var(--marge-w) solid transparent;
+}
+/* À venir : marge tiretée grise */
+.note-row--avenir {
+  border-left: none;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    repeating-linear-gradient(180deg, var(--ink-2) 0 10px, transparent 10px 18px) border-box;
+  border-left: var(--marge-w) solid transparent;
+  opacity: 0.92;
+}
+
+.note-row__label { font-weight: 700; font-size: 15px; }
+.note-row__meta  { font-size: 12.5px; color: var(--ink-2); }
+
+.note-row__input {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex: none;
+}
+.note-row__input input {
+  width: 72px;
+  text-align: center;
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.note-row__input--triple { gap: 6px; }
+.note-row__input--triple input { width: 52px; font-size: 15px; }
+.note-row__sur { color: var(--ink-2); font-size: 13px; font-weight: 600; }
+
+/* Encadré d'information (hypothèses de Terminale) */
+.callout {
+  background: var(--accent-soft);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+/* ----------------------------------------------------------------------------
+   10. BADGES
+   --------------------------------------------------------------------------- */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  vertical-align: middle;
+}
+.badge--ok    { background: color-mix(in srgb, var(--ok) 14%, transparent);    color: var(--ok); }
+.badge--warn  { background: color-mix(in srgb, var(--warn) 16%, transparent);  color: var(--warn); }
+.badge--marge { background: color-mix(in srgb, var(--marge) 12%, transparent); color: var(--marge); }
+
+/* ----------------------------------------------------------------------------
+   11. ÉCRAN RÉSULTATS : carte-copie, mini-notes, scénarios, assistant
+   --------------------------------------------------------------------------- */
+/* La carte-copie : synthèse principale, en-tête façon copie d'examen */
+.card--copie {
+  border-left: var(--marge-w) solid var(--accent);
+  box-shadow: var(--shadow);
+}
+.copie__ligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+}
+.copie__ligne span { color: var(--ink-2); font-weight: 600; }
+.num--xl { font-size: 40px; letter-spacing: -0.02em; }
+.num--xl small { font-size: 16px; color: var(--ink-2); font-weight: 700; }
+
+.copie__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+@media (min-width: 560px) {
+  .copie__grid { grid-template-columns: repeat(3, 1fr); }
+}
+.copie__grid span {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.copie__grid strong { font-size: 16px; }
+
+/* Notes minimales par épreuve */
+.mini-notes li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.mini-notes li:last-child { border-bottom: 0; }
+.mini-notes .num { font-size: 17px; }
+
+/* Scénarios */
+.scenarios { display: flex; flex-direction: column; gap: 10px; }
+.scenario {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  transition: border-color var(--transition);
+}
+.scenario.is-open { border-color: var(--accent); }
+.scenario__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.scenario__head h3 { font-size: 15.5px; font-weight: 800; }
+.scenario__desc { font-size: 13.5px; color: var(--ink-2); margin-top: 4px; }
+
+/* Assistant */
+.card--assistant { background: var(--accent-soft); border-color: transparent; }
+.conseils li {
+  padding: 7px 0 7px 22px;
+  position: relative;
+  font-size: 14.5px;
+}
+.conseils li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+/* ----------------------------------------------------------------------------
+   12. TABLEAU DE BORD
+   --------------------------------------------------------------------------- */
+.card--chart { margin-bottom: 0; }
+.chart-slot {
+  height: 220px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+/* Étape 4 : le fond gris disparaît quand Chart.js dessine dans le canvas */
+
+/* ----------------------------------------------------------------------------
+   13. BANDEAU DE SYNTHÈSE STICKY (bas d'écran, façon app native)
+   --------------------------------------------------------------------------- */
+.bandeau {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 30;
+  width: min(calc(100% - 2 * var(--gap)), var(--maxw));
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 10px 16px;
+}
+.bandeau__item { text-align: center; min-width: 0; }
+.bandeau__label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+.bandeau__item strong { font-size: 15px; }
+.bandeau__item--objectif strong { color: var(--accent); }
+
+/* ----------------------------------------------------------------------------
+   14. IMPRESSION (secours ; l'export officiel = PDF, étape 5)
+   --------------------------------------------------------------------------- */
+@media print {
+  .app-header, .bandeau, .form__nav, .btn { display: none !important; }
+  .card { box-shadow: none; break-inside: avoid; }
+  body { padding: 0; background: #fff; }
+}

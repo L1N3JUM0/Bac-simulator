@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Simulateur de moyenne au baccalauréat général (session 2027) : points acquis, notes minimales, scénarios et mentions.">
+  <meta name="theme-color" content="#2B49C3">
+
+  <title>SimuBac — Simulateur Bac Général 2027</title>
+
+  <!-- PWA (activée à l'étape 5) -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="assets/icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ================================================================
+       EN-TÊTE GLOBAL
+       Barre supérieure : logo, étape courante, bascule de thème.
+       ================================================================ -->
+  <header class="app-header" role="banner">
+    <div class="app-header__inner">
+      <a href="#ecran-accueil" class="brand" data-goto="accueil" aria-label="SimuBac, retour à l'accueil">
+        <span class="brand__badge" aria-hidden="true">/20</span>
+        <span class="brand__name">SimuBac</span>
+      </a>
+
+      <div class="app-header__actions">
+        <!-- Bascule clair / sombre / auto (persistée à l'étape 3) -->
+        <button type="button" class="btn-icon" id="btn-theme"
+                aria-label="Changer de thème (clair, sombre, automatique)">
+          <span class="btn-icon__glyph" aria-hidden="true">◐</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Barre de progression du parcours (masquée sur l'accueil) -->
+    <nav class="stepper" id="stepper" aria-label="Étapes de la simulation" hidden>
+      <ol class="stepper__list">
+        <li class="stepper__item" data-step="profil"><button type="button" data-goto="profil">Profil</button></li>
+        <li class="stepper__item" data-step="specialites"><button type="button" data-goto="specialites">Spécialités</button></li>
+        <li class="stepper__item" data-step="options"><button type="button" data-goto="options">Options</button></li>
+        <li class="stepper__item" data-step="notes"><button type="button" data-goto="notes">Notes</button></li>
+        <li class="stepper__item" data-step="resultats"><button type="button" data-goto="resultats">Résultats</button></li>
+        <li class="stepper__item" data-step="dashboard"><button type="button" data-goto="dashboard">Graphiques</button></li>
+      </ol>
+    </nav>
+  </header>
+
+  <!-- ================================================================
+       CONTENU PRINCIPAL
+       Chaque écran est une <section class="ecran">. Un seul est visible
+       à la fois (attribut hidden géré par script.js / ui.js).
+       ================================================================ -->
+  <main id="main" class="app-main" role="main">
+
+    <!-- ============================================================
+         ÉCRAN 1 — ACCUEIL
+         ============================================================ -->
+    <section class="ecran" id="ecran-accueil" aria-labelledby="titre-accueil">
+      <div class="hero card card--hero">
+        <p class="eyebrow">Baccalauréat général · Session 2027</p>
+        <h1 id="titre-accueil" class="hero__title">Où en es-tu,<br>vraiment&nbsp;?</h1>
+        <p class="hero__lead">
+          Tu as passé le français et les maths anticipées. SimuBac calcule tes
+          <strong>points déjà acquis</strong>, les <strong>notes minimales</strong> à viser en
+          Terminale et la <strong>mention</strong> à ta portée — selon les coefficients officiels.
+        </p>
+
+        <div class="hero__actions">
+          <button type="button" class="btn btn--primary btn--lg" data-goto="profil">
+            Commencer une simulation
+          </button>
+          <!-- Visible uniquement si une sauvegarde existe (étape 3) -->
+          <button type="button" class="btn btn--ghost btn--lg" id="btn-reprendre" hidden>
+            Reprendre <span class="btn__meta" id="reprendre-date"></span>
+          </button>
+        </div>
+
+        <p class="hero__disclaimer">
+          Simulation indicative — ne remplace ni les notes officielles ni la délibération du jury.
+        </p>
+      </div>
+
+      <!-- Rappel pédagogique des grands équilibres -->
+      <div class="grid grid--3">
+        <div class="card card--stat">
+          <p class="stat__value">40<span class="stat__unit">%</span></p>
+          <p class="stat__label">Contrôle continu</p>
+        </div>
+        <div class="card card--stat">
+          <p class="stat__value">60<span class="stat__unit">%</span></p>
+          <p class="stat__label">Épreuves finales</p>
+        </div>
+        <div class="card card--stat">
+          <p class="stat__value">12<span class="stat__unit">/100</span></p>
+          <p class="stat__label">déjà joués en Première<br>(français + maths)</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 2 — PROFIL & OBJECTIF
+         ============================================================ -->
+    <section class="ecran" id="ecran-profil" aria-labelledby="titre-profil" hidden>
+      <h2 id="titre-profil" class="ecran__title">Ton profil</h2>
+      <p class="ecran__sub">Tout est facultatif sauf l'objectif — il pilote la simulation.</p>
+
+      <form class="card form" novalidate>
+        <div class="form__row form__row--2">
+          <div class="field">
+            <label for="input-prenom">Prénom <span class="field__hint">(facultatif)</span></label>
+            <input type="text" id="input-prenom" name="prenom" autocomplete="given-name" placeholder="Ex. : Léa">
+          </div>
+          <div class="field">
+            <label for="input-nom">Nom <span class="field__hint">(facultatif)</span></label>
+            <input type="text" id="input-nom" name="nom" autocomplete="family-name" placeholder="Ex. : Martin">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="select-academie">Académie <span class="field__hint">(facultatif)</span></label>
+          <!-- Liste complète injectée depuis bacData.js à l'étape 3 ; ordre alphabétique -->
+          <select id="select-academie" name="academie">
+            <option value="">— Choisir —</option>
+          </select>
+        </div>
+
+        <fieldset class="field">
+          <legend>Ton objectif</legend>
+          <div class="chips" role="radiogroup" aria-label="Objectif visé">
+            <label class="chip"><input type="radio" name="objectif" value="10"><span>Admis <small>≥ 10</small></span></label>
+            <label class="chip"><input type="radio" name="objectif" value="12" checked><span>Assez Bien <small>≥ 12</small></span></label>
+            <label class="chip"><input type="radio" name="objectif" value="14"><span>Bien <small>≥ 14</small></span></label>
+            <label class="chip"><input type="radio" name="objectif" value="16"><span>Très Bien <small>≥ 16</small></span></label>
+            <label class="chip"><input type="radio" name="objectif" value="20"><span>20/20 <small>viser tout</small></span></label>
+          </div>
+        </fieldset>
+
+        <div class="form__nav">
+          <button type="button" class="btn btn--ghost" data-goto="accueil">Retour</button>
+          <button type="button" class="btn btn--primary" data-goto="specialites">Continuer</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 3 — SPÉCIALITÉS
+         ============================================================ -->
+    <section class="ecran" id="ecran-specialites" aria-labelledby="titre-spes" hidden>
+      <h2 id="titre-spes" class="ecran__title">Tes spécialités</h2>
+      <p class="ecran__sub">Choisis tes 3 spécialités de Première, puis celle que tu abandonnes.</p>
+
+      <div class="card">
+        <p class="eyebrow">1 · Mes 3 spécialités de Première</p>
+        <!-- Contenu de démonstration : la liste des 13 spécialités sera
+             générée depuis bacData.js à l'étape 3. -->
+        <div class="chips chips--wrap" id="liste-specialites" role="group" aria-label="Spécialités de Première (3 choix)">
+          <label class="chip"><input type="checkbox" checked><span>Mathématiques</span></label>
+          <label class="chip"><input type="checkbox" checked><span>Physique-chimie</span></label>
+          <label class="chip"><input type="checkbox" checked><span>SVT</span></label>
+          <label class="chip"><input type="checkbox"><span>SES</span></label>
+          <label class="chip"><input type="checkbox"><span>HGGSP</span></label>
+          <label class="chip"><input type="checkbox"><span>HLP</span></label>
+          <label class="chip"><input type="checkbox"><span>LLCER</span></label>
+          <label class="chip"><input type="checkbox"><span>NSI</span></label>
+          <label class="chip"><input type="checkbox"><span>Sciences de l'ingénieur</span></label>
+          <label class="chip"><input type="checkbox"><span>Arts</span></label>
+          <label class="chip"><input type="checkbox"><span>LCA</span></label>
+          <label class="chip"><input type="checkbox"><span>EPPCS</span></label>
+          <label class="chip"><input type="checkbox"><span>Biologie-écologie</span></label>
+        </div>
+        <p class="field__error" id="err-specialites" hidden>Choisis exactement 3 spécialités.</p>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">2 · Celle que j'abandonne en fin de Première</p>
+        <p class="card__note">Elle bascule en contrôle continu (coefficient 8). Les deux autres
+          seront évaluées en épreuve finale (coefficient 16 chacune).</p>
+        <div class="chips" id="liste-abandon" role="radiogroup" aria-label="Spécialité abandonnée">
+          <label class="chip chip--danger"><input type="radio" name="abandon" checked><span>SVT</span></label>
+          <label class="chip chip--danger"><input type="radio" name="abandon"><span>Mathématiques</span></label>
+          <label class="chip chip--danger"><input type="radio" name="abandon"><span>Physique-chimie</span></label>
+        </div>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="profil">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="options">Continuer</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 4 — OPTIONS
+         ============================================================ -->
+    <section class="ecran" id="ecran-options" aria-labelledby="titre-options" hidden>
+      <h2 id="titre-options" class="ecran__title">Tes options</h2>
+      <p class="ecran__sub">Chaque option ajoute un coefficient 2 par année suivie,
+        <strong>en plus</strong> des 100 coefficients. Une note faible peut donc faire baisser ta moyenne.</p>
+
+      <div class="card">
+        <p class="eyebrow">Options suivies en Première <span class="badge">1 max + LCA</span></p>
+        <!-- Généré depuis bacData.js à l'étape 3, avec règles de compatibilité -->
+        <div class="chips chips--wrap" id="options-premiere">
+          <label class="chip"><input type="checkbox"><span>LVC</span></label>
+          <label class="chip"><input type="checkbox"><span>Arts plastiques</span></label>
+          <label class="chip"><input type="checkbox"><span>Musique</span></label>
+          <label class="chip"><input type="checkbox"><span>Théâtre</span></label>
+          <label class="chip"><input type="checkbox"><span>Latin</span></label>
+          <label class="chip"><input type="checkbox"><span>Grec</span></label>
+          <label class="chip"><input type="checkbox"><span>EPS</span></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">Options prévues en Terminale <span class="badge">2 max + LCA</span></p>
+        <div class="chips chips--wrap" id="options-terminale">
+          <label class="chip"><input type="checkbox"><span>Maths expertes</span></label>
+          <label class="chip chip--disabled"><input type="checkbox" disabled><span>Maths complémentaires</span></label>
+          <label class="chip"><input type="checkbox"><span>DGEMC</span></label>
+          <label class="chip"><input type="checkbox"><span>LVC</span></label>
+          <label class="chip"><input type="checkbox"><span>Latin</span></label>
+          <label class="chip"><input type="checkbox"><span>Grec</span></label>
+        </div>
+        <p class="card__note">Maths complémentaires est réservée aux élèves qui abandonnent la
+          spécialité maths ; Maths expertes à ceux qui la conservent.</p>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="specialites">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="notes">Continuer</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 5 — NOTES
+         Trois volets : épreuves anticipées / CC Première / hypothèses Terminale.
+         ============================================================ -->
+    <section class="ecran" id="ecran-notes" aria-labelledby="titre-notes" hidden>
+      <h2 id="titre-notes" class="ecran__title">Tes notes</h2>
+
+      <!-- Onglets -->
+      <div class="tabs" role="tablist" aria-label="Catégories de notes">
+        <button type="button" class="tab is-active" role="tab" aria-selected="true" id="tab-ea" aria-controls="panel-ea">Épreuves anticipées</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" id="tab-cc1" aria-controls="panel-cc1">Bulletins 1<sup>re</sup></button>
+        <button type="button" class="tab" role="tab" aria-selected="false" id="tab-cct" aria-controls="panel-cct">Hypothèses T<sup>le</sup></button>
+      </div>
+
+      <!-- Volet 1 : épreuves anticipées (notes ACQUISES → marge pleine) -->
+      <div class="tab-panel" id="panel-ea" role="tabpanel" aria-labelledby="tab-ea">
+        <div class="note-row note-row--acquis card">
+          <div class="note-row__info">
+            <p class="note-row__label">Français — écrit</p>
+            <p class="note-row__meta">Coef 5 · Épreuve passée</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Note de français écrit sur 20" value="13">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+        <div class="note-row note-row--acquis card">
+          <div class="note-row__info">
+            <p class="note-row__label">Français — oral</p>
+            <p class="note-row__meta">Coef 5 · Épreuve passée</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Note de français oral sur 20" value="15">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+        <div class="note-row note-row--acquis card">
+          <div class="note-row__info">
+            <p class="note-row__label">Mathématiques anticipées</p>
+            <p class="note-row__meta">Coef 2 · Épreuve passée</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Note de mathématiques anticipées sur 20" value="12">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Volet 2 : contrôle continu de Première (démonstration) -->
+      <div class="tab-panel" id="panel-cc1" role="tabpanel" aria-labelledby="tab-cc1" hidden>
+        <div class="switch-line card card--flat">
+          <label class="switch">
+            <input type="checkbox" id="mode-trimestres">
+            <span class="switch__track" aria-hidden="true"></span>
+            <span class="switch__label">Saisir les 3 trimestres (au lieu de la moyenne annuelle)</span>
+          </label>
+        </div>
+
+        <!-- Exemple en mode « moyenne annuelle » -->
+        <div class="note-row note-row--acquis card">
+          <div class="note-row__info">
+            <p class="note-row__label">Histoire-géographie</p>
+            <p class="note-row__meta">Coef 3 (1<sup>re</sup>) · Bulletin</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Moyenne annuelle d'histoire-géographie sur 20" value="14,5">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+
+        <!-- Exemple en mode « 3 trimestres » : la moyenne se calcule seule -->
+        <div class="note-row note-row--acquis note-row--trimestres card">
+          <div class="note-row__info">
+            <p class="note-row__label">Enseignement scientifique</p>
+            <p class="note-row__meta">Coef 3 (1<sup>re</sup>) · Moyenne auto : <strong>13,7</strong></p>
+          </div>
+          <div class="note-row__input note-row__input--triple">
+            <input type="text" inputmode="decimal" placeholder="T1" aria-label="Trimestre 1" value="13">
+            <input type="text" inputmode="decimal" placeholder="T2" aria-label="Trimestre 2" value="14">
+            <input type="text" inputmode="decimal" placeholder="T3" aria-label="Trimestre 3" value="14">
+          </div>
+        </div>
+
+        <div class="note-row note-row--acquis card">
+          <div class="note-row__info">
+            <p class="note-row__label">SVT <span class="badge badge--marge">spé abandonnée</span></p>
+            <p class="note-row__meta">Coef 8 · Bulletin de Première</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Moyenne annuelle de la spécialité abandonnée sur 20" value="12">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Volet 3 : hypothèses Terminale (notes PROJETÉES → marge pointillée) -->
+      <div class="tab-panel" id="panel-cct" role="tabpanel" aria-labelledby="tab-cct" hidden>
+        <p class="callout">
+          Ces notes sont des <strong>hypothèses</strong>, pré-remplies avec tes moyennes de
+          Première. Ajuste-les au fil de l'année de Terminale : tout se recalcule aussitôt.
+        </p>
+        <div class="note-row note-row--projete card">
+          <div class="note-row__info">
+            <p class="note-row__label">Histoire-géographie</p>
+            <p class="note-row__meta">Coef 3 (T<sup>le</sup>) · Hypothèse</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Hypothèse histoire-géographie Terminale" value="14,5">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+        <div class="note-row note-row--avenir card">
+          <div class="note-row__info">
+            <p class="note-row__label">Philosophie</p>
+            <p class="note-row__meta">Coef 8 · Épreuve finale — à venir</p>
+          </div>
+          <div class="note-row__input">
+            <input type="text" inputmode="decimal" placeholder="—" aria-label="Hypothèse philosophie">
+            <span class="note-row__sur">/20</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="options">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="resultats">Voir mes résultats</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 6 — RÉSULTATS & SCÉNARIOS
+         ============================================================ -->
+    <section class="ecran" id="ecran-resultats" aria-labelledby="titre-resultats" hidden>
+      <h2 id="titre-resultats" class="ecran__title">Tes résultats</h2>
+
+      <!-- Carte-copie : synthèse principale (valeurs de démonstration) -->
+      <div class="card card--copie">
+        <div class="copie__ligne">
+          <span>Moyenne projetée</span>
+          <strong class="num num--xl">13,42<small>/20</small></strong>
+        </div>
+        <div class="copie__grid">
+          <div><span>Points acquis</span><strong class="num">318,5</strong></div>
+          <div><span>Points restants</span><strong class="num">960 max</strong></div>
+          <div><span>Coefficient total</span><strong class="num">104</strong></div>
+          <div><span>Mention actuelle</span><strong>Assez Bien</strong></div>
+          <div><span>Encore possible</span><strong>Très Bien</strong></div>
+          <div><span>Faisabilité objectif</span><strong class="num">80&nbsp;%</strong></div>
+        </div>
+      </div>
+
+      <!-- Notes minimales pour l'objectif -->
+      <div class="card">
+        <p class="eyebrow">Pour décrocher la mention Bien (≥ 14)</p>
+        <p class="card__note">Il te faut en moyenne <strong>14,8/20</strong> sur les épreuves de Terminale.</p>
+        <ul class="mini-notes">
+          <li><span>Spécialité 1 — Maths</span><strong class="num">14,8</strong></li>
+          <li><span>Spécialité 2 — Physique-chimie</span><strong class="num">14,8</strong></li>
+          <li><span>Philosophie</span><strong class="num">14,8</strong></li>
+          <li><span>Grand oral</span><strong class="num">14,8</strong></li>
+        </ul>
+      </div>
+
+      <!-- Scénarios -->
+      <div class="card">
+        <p class="eyebrow">Scénarios pour y arriver</p>
+        <div class="scenarios">
+          <article class="scenario is-open">
+            <header class="scenario__head">
+              <h3>Équilibré</h3><span class="badge badge--ok">réaliste</span>
+            </header>
+            <p class="scenario__desc">La même note partout — le chemin le plus régulier.</p>
+          </article>
+          <article class="scenario">
+            <header class="scenario__head">
+              <h3>Spécialités d'abord</h3><span class="badge">ambitieux</span>
+            </header>
+            <p class="scenario__desc">+2 points sur tes spés, la philo et le Grand oral respirent.</p>
+          </article>
+          <article class="scenario">
+            <header class="scenario__head">
+              <h3>Grand oral d'abord</h3><span class="badge badge--ok">réaliste</span>
+            </header>
+            <p class="scenario__desc">Le Grand oral se prépare bien : +3 points dessus, le reste s'allège.</p>
+          </article>
+          <article class="scenario">
+            <header class="scenario__head">
+              <h3>Optimiste</h3><span class="badge badge--warn">exigeant</span>
+            </header>
+            <p class="scenario__desc">Tu reproduis tes meilleures moyennes de Première partout.</p>
+          </article>
+        </div>
+      </div>
+
+      <!-- Assistant -->
+      <div class="card card--assistant" aria-live="polite">
+        <p class="eyebrow">L'assistant</p>
+        <ul class="conseils">
+          <li>La mention <strong>Assez Bien</strong> semble déjà acquise avec tes hypothèses actuelles.</li>
+          <li>Tes spécialités représentent <strong>31&nbsp;%</strong> de ta note finale.</li>
+          <li>Le Grand oral peut encore te faire gagner jusqu'à <strong>1,2 point</strong> de moyenne.</li>
+        </ul>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="notes">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="dashboard">Tableau de bord</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 7 — TABLEAU DE BORD (Chart.js à l'étape 4)
+         ============================================================ -->
+    <section class="ecran" id="ecran-dashboard" aria-labelledby="titre-dash" hidden>
+      <h2 id="titre-dash" class="ecran__title">Tableau de bord</h2>
+      <p class="ecran__sub">Les graphiques seront rendus avec Chart.js (étape 4).</p>
+
+      <div class="grid grid--2">
+        <div class="card card--chart">
+          <p class="eyebrow">Répartition des coefficients</p>
+          <div class="chart-slot"><canvas id="chart-coefs" aria-label="Répartition des coefficients" role="img"></canvas></div>
+        </div>
+        <div class="card card--chart">
+          <p class="eyebrow">Points acquis / projetés / restants</p>
+          <div class="chart-slot"><canvas id="chart-points" aria-label="Points acquis, projetés et restants" role="img"></canvas></div>
+        </div>
+        <div class="card card--chart">
+          <p class="eyebrow">Progression vers l'objectif</p>
+          <div class="chart-slot"><canvas id="chart-progression" aria-label="Progression vers l'objectif" role="img"></canvas></div>
+        </div>
+        <div class="card card--chart">
+          <p class="eyebrow">Note requise par mention</p>
+          <div class="chart-slot"><canvas id="chart-mentions" aria-label="Note moyenne requise pour chaque mention" role="img"></canvas></div>
+        </div>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="resultats">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="export">Exporter / Réglages</button>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ÉCRAN 8 — EXPORT & RÉGLAGES
+         ============================================================ -->
+    <section class="ecran" id="ecran-export" aria-labelledby="titre-export" hidden>
+      <h2 id="titre-export" class="ecran__title">Export &amp; réglages</h2>
+
+      <div class="card">
+        <p class="eyebrow">Bilan PDF</p>
+        <p class="card__note">Un document complet : notes, coefficients, calculs, graphiques et scénarios.</p>
+        <button type="button" class="btn btn--primary" id="btn-pdf" disabled>
+          Télécharger le bilan PDF <span class="btn__meta">(étape 5)</span>
+        </button>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">Sauvegarde</p>
+        <p class="card__note">Ta simulation est enregistrée automatiquement sur cet appareil.
+          Rien n'est envoyé sur Internet.</p>
+        <button type="button" class="btn btn--danger" id="btn-reset">Réinitialiser la simulation</button>
+      </div>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="dashboard">Retour</button>
+        <button type="button" class="btn btn--ghost" data-goto="accueil">Accueil</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================================================================
+       BANDEAU DE SYNTHÈSE (sticky, écrans notes → dashboard)
+       Mis à jour en direct par ui.js à l'étape 3 (aria-live).
+       ================================================================ -->
+  <aside class="bandeau" id="bandeau" aria-live="polite" aria-label="Synthèse en direct" hidden>
+    <div class="bandeau__item">
+      <span class="bandeau__label">Moyenne</span>
+      <strong class="num" id="bandeau-moyenne">13,42</strong>
+    </div>
+    <div class="bandeau__item">
+      <span class="bandeau__label">Acquis</span>
+      <strong class="num" id="bandeau-acquis">318,5 pts</strong>
+    </div>
+    <div class="bandeau__item">
+      <span class="bandeau__label">Mention</span>
+      <strong id="bandeau-mention">AB</strong>
+    </div>
+    <div class="bandeau__item bandeau__item--objectif">
+      <span class="bandeau__label">Objectif</span>
+      <strong id="bandeau-objectif">Bien</strong>
+    </div>
+  </aside>
+
+  <!-- Point d'entrée (modules ES6 → servir via un serveur local, cf. README) -->
+  <script type="module" src="script.js"></script>
+</body>
+</html>
