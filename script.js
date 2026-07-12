@@ -46,12 +46,19 @@ const state = sauvegarde || etatInitial();
    2. RECALCUL & RENDU (le cœur de la boucle)
    --------------------------------------------------------------------------- */
 
+/** Derniers résultats calculés (réutilisés par le tableau de bord). */
+let derniersResultats = null;
+
 /** À chaque frappe : recalcule tout, met à jour résultats + bandeau, sauve. */
 function recalculer() {
-  const resultats = calculerTout(state, BAC_DATA);
-  ui.afficherErreurs(resultats.erreurs);
-  ui.renderResultats(state, resultats, BAC_DATA);
-  ui.renderBandeau(state, resultats);
+  derniersResultats = calculerTout(state, BAC_DATA);
+  ui.afficherErreurs(derniersResultats.erreurs);
+  ui.renderResultats(state, derniersResultats, BAC_DATA);
+  ui.renderBandeau(state, derniersResultats);
+  // Les graphiques ne sont reconstruits que si l'écran est visible
+  if (state.ui.ecranCourant === "dashboard") {
+    ui.renderDashboard(state, derniersResultats, BAC_DATA);
+  }
   storage.save(state);
 }
 
@@ -91,6 +98,11 @@ function afficherEcran(nom) {
   document.getElementById("bandeau").hidden = !ECRANS_AVEC_BANDEAU.has(nom);
   window.scrollTo({ top: 0, behavior: "instant" });
 
+  // Tableau de bord : (re)construit à chaque ouverture (suit aussi le thème)
+  if (nom === "dashboard" && derniersResultats) {
+    ui.renderDashboard(state, derniersResultats, BAC_DATA);
+  }
+
   // Mémorise l'écran courant pour le bouton « Reprendre »
   if (state.ui.ecranCourant !== nom) {
     state.ui.ecranCourant = nom;
@@ -121,6 +133,9 @@ document.getElementById("btn-theme").addEventListener("click", () => {
     CYCLE_THEMES[(CYCLE_THEMES.indexOf(state.ui.theme) + 1) % CYCLE_THEMES.length];
   state.ui.theme = suivant;
   appliquerTheme(suivant);
+  if (state.ui.ecranCourant === "dashboard" && derniersResultats) {
+    ui.renderDashboard(state, derniersResultats, BAC_DATA); // couleurs du thème
+  }
   storage.save(state);
 });
 

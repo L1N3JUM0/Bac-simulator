@@ -14,8 +14,8 @@ réussite au baccalauréat : points acquis, notes minimales à viser, scénarios
 | 0 | Document de conception (`CONCEPTION.md`) | ✅ validé |
 | 1 | Arborescence, HTML complet, CSS complet, squelettes JS, icônes PWA | ✅ |
 | 2 | `bacData.js` + `calculator.js` (moteur de calcul) + tests | ✅ |
-| 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ✅ **← livré** |
-| 4 | Tableau de bord Chart.js + assistant | ⏳ |
+| 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ✅ |
+| 4 | Tableau de bord Chart.js + assistant | ✅ **← livré** |
 | 5 | Export PDF, PWA activée, accessibilité finale | ⏳ |
 
 ## Lancer le projet en local
@@ -65,9 +65,20 @@ pdf.js              Export du bilan PDF (jsPDF)
 manifest.json       PWA (installation Android / iOS)
 service-worker.js   Cache hors ligne (activé à l'étape 5)
 assets/icons/       Icônes PWA (192, 512, maskable, apple-touch)
-assets/libs/        Chart.js et jsPDF embarqués (étapes 4-5)
+assets/libs/        Chart.js 4.5.1 embarqué (jsPDF à l'étape 5)
 CONCEPTION.md       Document de conception validé (règles officielles, algorithmes)
 ```
+
+## Tableau de bord (étape 4)
+
+Quatre graphiques Chart.js (bibliothèque **embarquée** dans `assets/libs/`,
+aucun CDN → fonctionne hors ligne) :
+répartition des coefficients (donut), points acquis / projetés / restants
+(barre empilée), jauge de progression vers l'objectif (avec pourcentage),
+et note moyenne requise en Terminale pour chaque mention (barres colorées :
+vert = déjà à ton niveau, rouge = inaccessible). Les graphiques se
+reconstruisent à l'ouverture de l'écran, à chaque recalcul et au changement
+de thème.
 
 ## Sauvegarde locale (étape 3)
 

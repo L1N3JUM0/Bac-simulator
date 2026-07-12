@@ -297,7 +297,7 @@
          ============================================================ -->
     <section class="ecran" id="ecran-dashboard" aria-labelledby="titre-dash" hidden>
       <h2 id="titre-dash" class="ecran__title">Tableau de bord</h2>
-      <p class="ecran__sub">Les graphiques seront rendus avec Chart.js (étape 4).</p>
+      <p class="ecran__sub">Quatre lectures visuelles de ta simulation — mises à jour en direct.</p>
 
       <div class="grid grid--2">
         <div class="card card--chart">
@@ -374,6 +374,8 @@
     </div>
   </aside>
 
+  <!-- Chart.js embarqué localement (assets/libs) : window.Chart -->
+  <script src="assets/libs/chart.umd.min.js"></script>
   <!-- Point d'entrée (modules ES6 → serveur local ou GitHub Pages, cf. README) -->
   <script type="module" src="script.js"></script>
 </body>

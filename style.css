@@ -780,3 +780,10 @@ input.is-invalid { border-color: var(--marge) !important; }
   font-size: 12.5px;
   margin-bottom: 0;
 }
+
+/* ----------------------------------------------------------------------------
+   17. ÉTAPE 4 — TABLEAU DE BORD CHART.JS
+   --------------------------------------------------------------------------- */
+.chart-slot { position: relative; padding: 8px; }
+.chart-slot--pret { background: transparent; }
+.chart-slot canvas { width: 100% !important; height: 100% !important; }
