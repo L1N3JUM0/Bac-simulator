@@ -142,11 +142,17 @@ if (sauvegarde) {
   });
 }
 
-/* « Pré-remplir les hypothèses de Terminale avec les moyennes de Première » */
+/* « Pré-remplir les hypothèses de Terminale avec les moyennes de Première ».
+   Ne touche QUE les champs encore vides : les hypothèses déjà saisies
+   par l'élève sont respectées. */
 document.getElementById("btn-prefill").addEventListener("click", () => {
+  const estVide = (valeur) =>
+    normaliserNote(valeur ?? null, true, BAC_DATA.regles) === null;
+
   // Tronc commun présent sur les deux années
   for (const cc of BAC_DATA.controleContinu) {
     if (cc.coefPremiere === 0 || cc.coefTerminale === 0) continue;
+    if (!estVide(state.notes.ccTerminale[cc.id])) continue; // déjà saisie
     const moyenne = normaliserNote(state.notes.ccPremiere[cc.id] ?? null, true, BAC_DATA.regles);
     if (moyenne !== null) state.notes.ccTerminale[cc.id] = moyenne;
   }
@@ -154,6 +160,7 @@ document.getElementById("btn-prefill").addEventListener("click", () => {
   for (const idOption of state.options.terminale) {
     if (!state.options.premiere.includes(idOption)) continue;
     const cle = `opt-${idOption}`;
+    if (!estVide(state.notes.ccTerminale[cle])) continue;
     const moyenne = normaliserNote(state.notes.ccPremiere[cle] ?? null, true, BAC_DATA.regles);
     if (moyenne !== null) state.notes.ccTerminale[cle] = moyenne;
   }

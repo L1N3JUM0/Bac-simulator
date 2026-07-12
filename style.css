@@ -763,3 +763,20 @@ input.is-invalid { border-color: var(--marge) !important; }
   color: var(--ink-2);
 }
 .scenario__notes .num { color: var(--ink); font-size: 14px; }
+
+/* ----------------------------------------------------------------------------
+   16. CORRECTIFS v0.3.1
+   --------------------------------------------------------------------------- */
+
+/* Champs de note élargis : « 12,85 » doit être lisible en entier */
+.note-row__input input { width: 92px; }
+.note-row__input--triple input { width: 62px; font-size: 14px; }
+
+/* Légende acquis / projeté de la carte de résultats */
+.copie__legende {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 12.5px;
+  margin-bottom: 0;
+}

@@ -233,7 +233,7 @@
         <button type="button" class="btn btn--ghost" id="btn-prefill">
           Pré-remplir avec mes moyennes de Première
         </button>
-        <p class="eyebrow" style="margin-top:16px">Bulletins de Terminale</p>
+        <p class="eyebrow" style="margin-top:16px">Bulletins de Terminale <span class="badge">dont EPS, coef 6</span></p>
         <div id="liste-cct"></div>
         <p class="eyebrow" style="margin-top:16px">Épreuves finales</p>
         <div id="liste-epreuves-terminale"></div>
@@ -257,13 +257,16 @@
           <strong class="num num--xl" id="res-moyenne">—</strong>
         </div>
         <div class="copie__grid">
-          <div><span>Points acquis</span><strong class="num" id="res-acquis">—</strong></div>
+          <div><span>Points acquis (Première)</span><strong class="num" id="res-acquis">—</strong></div>
           <div><span>Points restants (max)</span><strong class="num" id="res-restants">—</strong></div>
           <div><span>Coefficient total</span><strong class="num" id="res-coef">—</strong></div>
           <div><span>Mention projetée</span><strong id="res-mention">—</strong></div>
           <div><span>Encore possible</span><strong id="res-mention-max">—</strong></div>
           <div><span>Indice de faisabilité</span><strong class="num" id="res-faisabilite">—</strong></div>
         </div>
+        <p class="card__note copie__legende"><strong>Acquis</strong> = épreuves anticipées + bulletins de
+          Première (contrôle continu inclus) — ces points sont définitifs.
+          <strong>Projeté</strong> = tes hypothèses de Terminale, encore modifiables.</p>
         <p class="card__note" id="res-avertissement" hidden></p>
       </div>
 

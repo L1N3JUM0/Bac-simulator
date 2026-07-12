@@ -313,7 +313,7 @@ export function notesMinimales(objectif, grille, data) {
     } else {
       // Ligne non renseignée hors épreuves cibles : hypothèse par défaut
       pointsFixes += hypotheseDefaut * ligne.coef;
-      lignesSupposees.push(ligne.id);
+      lignesSupposees.push({ id: ligne.id, label: ligne.label, annee: ligne.annee });
     }
   }
 

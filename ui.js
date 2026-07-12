@@ -276,7 +276,10 @@ export function renderNotes(state, data, onNote) {
     const liste = $(cible);
     liste.innerHTML = "";
     const notes = annee === "premiere" ? state.notes.ccPremiere : state.notes.ccTerminale;
-    const enTrimestres = state.saisieCC === "trimestres";
+    // Le mode « 3 trimestres » ne concerne que les VRAIS bulletins (Première).
+    // Les hypothèses de Terminale restent une moyenne simple : ce sont des
+    // estimations, modifiables au fil de l'année.
+    const enTrimestres = annee === "premiere" && state.saisieCC === "trimestres";
 
     /* Matières du tronc commun de l'année */
     for (const cc of data.controleContinu) {
@@ -396,11 +399,14 @@ export function renderResultats(state, resultats, data) {
     ? synthese.meilleureMentionPossible.label : "—";
   $("#res-faisabilite").textContent = faisabilite === null ? "—" : `${faisabilite} %`;
 
-  /* Avertissement : lignes supposées (moyennes manquantes) */
+  /* Avertissement : liste NOMMÉE des moyennes non renseignées */
   const avertissement = $("#res-avertissement");
   if (minimales.lignesSupposees.length > 0) {
-    avertissement.textContent = `${minimales.lignesSupposees.length} moyenne(s) non renseignée(s) : `
-      + `elles sont supposées égales à ${fmt(minimales.hypotheseDefaut)}/20 dans le calcul de l'objectif.`;
+    const libelles = minimales.lignesSupposees
+      .map((l) => `${l.label} (${l.annee === "premiere" ? "1re" : "Tle"})`)
+      .join(", ");
+    avertissement.innerHTML = `<strong>Non renseignées</strong> — supposées à `
+      + `${fmt(minimales.hypotheseDefaut)}/20 dans le calcul de l'objectif : ${libelles}.`;
     avertissement.hidden = false;
   } else {
     avertissement.hidden = true;
