@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimuBac — Tests du moteur de calcul</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Styles propres à la page de tests */
+    .test-ligne { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+    .test-ligne:last-child { border-bottom: 0; }
+    .test-ok    { color: var(--ok); font-weight: 800; }
+    .test-ko    { color: var(--marge); font-weight: 800; }
+    .test-msg   { color: var(--marge); font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <main class="app-main">
+    <h1 class="ecran__title">Tests du moteur de calcul</h1>
+    <p class="ecran__sub">calculator.js + bacData.js — session 2027. À relancer après toute modification des coefficients.</p>
+    <div class="card">
+      <p class="eyebrow" id="bilan">Exécution…</p>
+      <div id="rapport"></div>
+    </div>
+    <p><a href="index.html">← Retour à l'application</a></p>
+  </main>
+
+  <script type="module">
+    import { obtenirResultats } from "./tests.js";
+    const resultats = obtenirResultats();
+    const rapport = document.getElementById("rapport");
+    let reussis = 0;
+    for (const r of resultats) {
+      if (r.ok) reussis++;
+      const ligne = document.createElement("div");
+      ligne.className = "test-ligne";
+      ligne.innerHTML = `<span class="${r.ok ? "test-ok" : "test-ko"}">${r.ok ? "✓" : "✗"}</span>
+        <span>${r.nom}${r.ok ? "" : ` — <span class="test-msg">${r.message}</span>`}</span>`;
+      rapport.appendChild(ligne);
+    }
+    document.getElementById("bilan").textContent =
+      `${reussis}/${resultats.length} tests réussis`;
+  </script>
+</body>
+</html>
