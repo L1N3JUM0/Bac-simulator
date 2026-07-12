@@ -1,5 +1,5 @@
 /* ============================================================================
-   SimuBac — style.css
+   Bac Simulator — style.css
    ----------------------------------------------------------------------------
    Direction visuelle « Encre & Copie » : l'application emprunte au monde de la
    copie d'examen — papier clair, encre bleue de stylo, marge qui code le
@@ -740,3 +740,26 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); outline: n
   .card { box-shadow: none; break-inside: avoid; }
   body { padding: 0; background: #fff; }
 }
+
+/* ----------------------------------------------------------------------------
+   15. AJOUTS ÉTAPE 3 — saisie invalide, niveaux de conseils, notes de scénario
+   --------------------------------------------------------------------------- */
+
+/* Champ de note invalide (hors bornes ou non numérique) */
+input.is-invalid { border-color: var(--marge) !important; }
+
+/* Conseils de l'assistant : la puce code le niveau */
+.conseils li[data-niveau="ok"]::before     { content: "✓"; color: var(--ok); }
+.conseils li[data-niveau="info"]::before   { content: "→"; color: var(--accent); }
+.conseils li[data-niveau="alerte"]::before { content: "!"; color: var(--marge); }
+
+/* Notes détaillées dans chaque scénario */
+.scenario__notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.scenario__notes .num { color: var(--ink); font-size: 14px; }

@@ -1,5 +1,5 @@
 /* ============================================================================
-   SimuBac — calculator.js
+   Bac Simulator — calculator.js
    ----------------------------------------------------------------------------
    MOTEUR DE CALCUL PUR : aucune manipulation du DOM, aucun accès au
    localStorage. Entrées (state + BAC_DATA) → sorties (résultats).
@@ -97,7 +97,7 @@ export function normaliserNote(note, estCC, regles) {
 /** Renvoie le label d'une spécialité à partir de son id. */
 function labelSpecialite(id, data) {
   const spe = data.specialites.find((s) => s.id === id);
-  return spe ? spe.label : id;
+  return spe ? spe.label : (id || "Spécialité (à choisir)");
 }
 
 /** Renvoie le label d'une option à partir de son id. */

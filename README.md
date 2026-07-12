@@ -1,4 +1,4 @@
-# SimuBac — Simulateur Bac Général (session 2027)
+# Bac Simulator — Simulateur du Bac Général (session 2027)
 
 Application web 100 % côté client (HTML5 / CSS3 / JavaScript ES6, **aucun framework,
 aucun backend**) permettant à un élève de Première Générale ayant passé les épreuves
@@ -12,9 +12,9 @@ réussite au baccalauréat : points acquis, notes minimales à viser, scénarios
 | Étape | Contenu | Statut |
 |---|---|---|
 | 0 | Document de conception (`CONCEPTION.md`) | ✅ validé |
-| 1 | Arborescence, HTML complet, CSS complet, squelettes JS, icônes PWA | ✅ **← livré** |
-| 2 | `bacData.js` + `calculator.js` (moteur de calcul) + tests | ⏳ |
-| 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ⏳ |
+| 1 | Arborescence, HTML complet, CSS complet, squelettes JS, icônes PWA | ✅ |
+| 2 | `bacData.js` + `calculator.js` (moteur de calcul) + tests | ✅ |
+| 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ✅ **← livré** |
 | 4 | Tableau de bord Chart.js + assistant | ⏳ |
 | 5 | Export PDF, PWA activée, accessibilité finale | ⏳ |
 
@@ -68,6 +68,28 @@ assets/icons/       Icônes PWA (192, 512, maskable, apple-touch)
 assets/libs/        Chart.js et jsPDF embarqués (étapes 4-5)
 CONCEPTION.md       Document de conception validé (règles officielles, algorithmes)
 ```
+
+## Sauvegarde locale (étape 3)
+
+L'état complet de la simulation (profil, spécialités, options, notes, thème,
+écran courant) est enregistré automatiquement dans le `localStorage` du
+navigateur sous la clé `bac-simulator.v1`, à chaque modification. Rien n'est
+envoyé sur Internet. Le bouton « Reprendre » de l'accueil rouvre la simulation
+là où elle a été laissée ; « Réinitialiser » (écran Réglages) efface tout
+après confirmation. Le schéma est versionné (`schemaVersion`) pour permettre
+des migrations futures sans perte de données.
+
+## Tests du moteur de calcul
+
+Le moteur (`calculator.js`) est couvert par **30 tests** (`tests.js`).
+Deux façons de les lancer :
+
+- **Navigateur** : ouvrir `tests.html` (via le serveur local) → rapport visuel.
+- **Node** : `node --input-type=module -e "import('./tests.js').then(m => process.exit(m.afficherConsole()))"`
+
+⚠️ À relancer après **toute** modification de `bacData.js` : les tests vérifient
+les totaux de coefficients (100 hors options), les seuils de mentions, la
+mécanique des options et des scénarios.
 
 ## Modifier les coefficients (évolution réglementaire)
 

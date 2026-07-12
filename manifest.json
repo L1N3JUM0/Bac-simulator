@@ -1,6 +1,6 @@
 {
-  "name": "SimuBac — Simulateur Bac Général 2027",
-  "short_name": "SimuBac",
+  "name": "Bac Simulator — Bac Général 2027",
+  "short_name": "Bac Simulator",
   "description": "Simulateur de moyenne au baccalauréat général : points acquis, notes minimales, scénarios et mentions.",
   "lang": "fr",
   "start_url": "./index.html",

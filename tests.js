@@ -1,5 +1,5 @@
 /* ============================================================================
-   SimuBac — tests.js
+   Bac Simulator — tests.js
    ----------------------------------------------------------------------------
    SUITE DE TESTS DU MOTEUR DE CALCUL (calculator.js + bacData.js).
    Aucune dépendance : mini-framework d'assertions maison.

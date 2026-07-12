@@ -1,5 +1,5 @@
 /* ============================================================================
-   SimuBac — bacData.js
+   Bac Simulator — bacData.js
    ----------------------------------------------------------------------------
    ✅ SOURCE UNIQUE DE VÉRITÉ RÉGLEMENTAIRE — baccalauréat GÉNÉRAL, session 2027.
 

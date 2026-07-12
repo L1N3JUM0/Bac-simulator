@@ -1,5 +1,5 @@
 /* ============================================================================
-   SimuBac — service-worker.js
+   Bac Simulator — service-worker.js
    ----------------------------------------------------------------------------
    PWA / HORS LIGNE — stratégie « cache-first » :
    tous les fichiers de l'application sont pré-mis en cache à l'installation,
@@ -13,7 +13,7 @@
    L'enregistrement est déclenché depuis script.js (décommenté à l'étape 5).
    ============================================================================ */
 
-const NOM_CACHE = "simubac-v1";
+const NOM_CACHE = "bac-simulator-v1";
 
 /** Fichiers pré-mis en cache. Complété aux étapes 4-5 (libs, icônes). */
 const FICHIERS = [
