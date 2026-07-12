@@ -903,3 +903,11 @@ input.is-invalid { border-color: var(--marge) !important; }
 
 /* Bouton fermer de la modale : zone tactile confortable (min. 44px) */
 #modale-fermer { width: 44px; height: 44px; }
+
+/* ----------------------------------------------------------------------------
+   21. CORRECTIF v1.1.2 — la modale respecte l'attribut hidden
+   `display: grid` sur .modale écrasait le `display: none` de l'attribut
+   hidden (même spécificité, règle plus tardive) : la modale restait donc
+   affichée en permanence. Cette règle rétablit la priorité correcte.
+   --------------------------------------------------------------------------- */
+.modale[hidden] { display: none; }

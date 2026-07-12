@@ -861,14 +861,14 @@ export function initModaleGraphiques() {
       document.body.classList.add("no-scroll");
       boutonFermer.focus();
       // Le canvas n'a ses dimensions qu'une fois la modale affichée et le
-      // layout flex calculé : on attend une frame avant de dessiner, sinon
-      // Chart.js peint dans un canvas 0×0 (carré blanc sur mobile).
-      requestAnimationFrame(() => {
+      // layout calculé : on attend DEUX frames avant de dessiner, sinon
+      // Chart.js peindrait dans un canvas 0×0.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
         if (graphiqueZoom) graphiqueZoom.destroy();
         const config = entree.fabrique();
         config.options = { ...config.options, responsive: true, maintainAspectRatio: false };
         graphiqueZoom = new window.Chart(document.getElementById("chart-zoom"), config);
-      });
+      }));
     };
 
     slot.addEventListener("click", ouvrir);
