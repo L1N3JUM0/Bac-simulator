@@ -539,3 +539,92 @@ export function calculerTout(state, data) {
 
   return { erreurs, grille, synthese, minimales, scenarios, faisabilite, conseils };
 }
+
+/* ----------------------------------------------------------------------------
+   10. RATTRAPAGE (épreuves du 2d groupe) — v1.1
+   ---------------------------------------------------------------------------
+   Règle officielle : entre 8 et 10 de moyenne, le candidat passe DEUX oraux
+   de rattrapage portant sur des matières évaluées en épreuve ÉCRITE du
+   1er groupe (français écrit, philosophie, les deux spécialités). Pour
+   chaque matière, la MEILLEURE des deux notes (écrit initial / oral) est
+   conservée. Il faut remonter la moyenne finale à 10/20.
+   --------------------------------------------------------------------------- */
+
+/** Épreuves écrites éligibles aux oraux de rattrapage. */
+const EPREUVES_RATTRAPABLES = ["fr-ecrit", "philo", "spe1", "spe2"];
+
+/**
+ * Prépare la simulation du rattrapage.
+ * Les lignes sans note sont supposées à la moyenne actuelle (cohérent avec
+ * notesMinimales) pour obtenir un total de points exploitable.
+ * @returns {object} { concerne, pointsManquants, matieres: [{id,label,coef,
+ *                     note, oralSeul, oralSeulFaisable}] }
+ */
+export function simulerRattrapage(grille, data) {
+  const hypothese = defautHypothese(grille);
+
+  let coefTotal = 0;
+  let points = 0;
+  for (const ligne of grille) {
+    coefTotal += ligne.coef;
+    points += (ligne.note ?? hypothese) * ligne.coef;
+  }
+
+  const moyenne = coefTotal > 0 ? points / coefTotal : null;
+  const pointsManquants = 10 * coefTotal - points;   // > 0 si moyenne < 10
+
+  const matieres = grille
+    .filter((l) => EPREUVES_RATTRAPABLES.includes(l.id))
+    .map((l) => {
+      const note = l.note ?? hypothese;
+      const oralSeul = note + pointsManquants / l.coef; // en ne repassant qu'elle
+      return {
+        id: l.id,
+        label: l.label,
+        coef: l.coef,
+        note,
+        oralSeul,
+        oralSeulFaisable: oralSeul <= 20 + EPS,
+      };
+    });
+
+  return {
+    concerne: moyenne !== null && moyenne >= 8 - EPS && moyenne < 10 - EPS,
+    moyenne,
+    pointsManquants: Math.max(0, pointsManquants),
+    matieres,
+  };
+}
+
+/**
+ * Notes d'oral nécessaires pour une PAIRE de matières choisies.
+ * Répartition à effort égal (même hausse de points sur chaque note),
+ * avec report sur l'autre matière si l'une sature à 20.
+ * @param {Array} paire - deux éléments de simulerRattrapage().matieres
+ * @param {number} pointsManquants
+ * @returns {object} { faisable, oraux: [{id, label, note, oral}] }
+ */
+export function oralsRattrapage(paire, pointsManquants) {
+  const [a, b] = paire;
+  const hausse = pointsManquants / (a.coef + b.coef);
+  let oralA = a.note + hausse;
+  let oralB = b.note + hausse;
+
+  // Saturation à 20 : le reste de l'effort bascule sur l'autre matière
+  if (oralA > 20) {
+    oralA = 20;
+    oralB = b.note + (pointsManquants - (20 - a.note) * a.coef) / b.coef;
+  } else if (oralB > 20) {
+    oralB = 20;
+    oralA = a.note + (pointsManquants - (20 - b.note) * b.coef) / a.coef;
+  }
+
+  const arrondir = (x) => Math.ceil(x * 10) / 10; // au dixième supérieur : prudent
+  return {
+    faisable: oralA <= 20 + EPS && oralB <= 20 + EPS,
+    oraux: [
+      { id: a.id, label: a.label, note: a.note, oral: arrondir(Math.max(a.note, oralA)) },
+      { id: b.id, label: b.label, note: b.note, oral: arrondir(Math.max(b.note, oralB)) },
+    ],
+  };
+}

@@ -10,7 +10,10 @@
    Les graphiques Chart.js arrivent à l'étape 4.
    ============================================================================ */
 
-import { parseNote, normaliserNote, notesMinimales } from "./calculator.js";
+import {
+  parseNote, normaliserNote, notesMinimales,
+  calculerTout, simulerRattrapage, oralsRattrapage,
+} from "./calculator.js";
 
 /* ----------------------------------------------------------------------------
    1. PETITS OUTILS
@@ -483,6 +486,10 @@ export function renderResultats(state, resultats, data) {
     li.textContent = conseil.texte;
     conteneurConseils.appendChild(li);
   }
+
+  /* v1.1 : rattrapage + comparateur de notes cibles */
+  renderRattrapage(state, resultats, data);
+  renderComparateur(state, resultats, data);
 }
 
 /** Met à jour le bandeau sticky de synthèse. */
@@ -603,7 +610,7 @@ export function configsDashboard(state, resultats, data) {
   const seuils = data.mentions.filter((m) => m.seuil >= 10).sort((a, b) => a.seuil - b.seuil);
   const requises = seuils.map((m) => notesMinimales(m.seuil, grille, data).noteUniforme);
 
-  return [
+  const configs = [
     {
       id: "chart-coefs",
       titre: "Répartition des coefficients",
@@ -733,6 +740,45 @@ export function configsDashboard(state, resultats, data) {
       }),
     },
   ];
+
+  /* --- 5e graphique (v1.1) : évolution de la moyenne épinglée ------------ */
+  if (state.historique && state.historique.length > 0) {
+    const points = state.historique;
+    configs.push({
+      id: "chart-historique",
+      titre: "Évolution de ma moyenne projetée",
+      fabrique: () => ({
+        type: "line",
+        data: {
+          labels: points.map((p) =>
+            new Date(p.date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })),
+          datasets: [{
+            label: "Moyenne projetée /20",
+            data: points.map((p) => p.moyenne),
+            borderColor: accent,
+            backgroundColor: accent,
+            pointRadius: 3,
+            tension: 0.3,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          scales: { y: {
+            min: Math.max(0, Math.floor(Math.min(...points.map((p) => p.moyenne)) - 1)),
+            max: Math.min(20, Math.ceil(Math.max(...points.map((p) => p.moyenne)) + 1)),
+          } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              label: (ctx) => ` ${ctx.parsed.y.toFixed(2).replace(".", ",")}/20`,
+            } },
+          },
+        },
+      }),
+    });
+  }
+
+  return configs;
 }
 
 /** Crée (ou remplace) un graphique dans le canvas donné. */
@@ -761,6 +807,11 @@ export function renderDashboard(state, resultats, data) {
   Chart.defaults.borderColor = couleurTheme("--line");
   const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   Chart.defaults.animation = reduit ? false : { duration: 350 };
+
+  const carteHistorique = document.getElementById("carte-historique");
+  if (carteHistorique) {
+    carteHistorique.hidden = !(state.historique && state.historique.length > 0);
+  }
 
   fabriquesCourantes = configsDashboard(state, resultats, data);
   for (const entree of fabriquesCourantes) {
@@ -808,14 +859,174 @@ export function initModaleGraphiques() {
       document.getElementById("modale-titre").textContent = entree.titre;
       modale.hidden = false;
       document.body.classList.add("no-scroll");
-      if (graphiqueZoom) graphiqueZoom.destroy();
-      graphiqueZoom = new window.Chart(document.getElementById("chart-zoom"), entree.fabrique());
       boutonFermer.focus();
+      // Le canvas n'a ses dimensions qu'une fois la modale affichée et le
+      // layout flex calculé : on attend une frame avant de dessiner, sinon
+      // Chart.js peint dans un canvas 0×0 (carré blanc sur mobile).
+      requestAnimationFrame(() => {
+        if (graphiqueZoom) graphiqueZoom.destroy();
+        const config = entree.fabrique();
+        config.options = { ...config.options, responsive: true, maintainAspectRatio: false };
+        graphiqueZoom = new window.Chart(document.getElementById("chart-zoom"), config);
+      });
     };
 
     slot.addEventListener("click", ouvrir);
     slot.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ouvrir(); }
     });
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   11. v1.1 — NOTES CIBLES, COMPARATEUR « ET SI ? », RATTRAPAGE
+   --------------------------------------------------------------------------- */
+
+/** Les 4 épreuves de Terminale, cibles du mode manuel. */
+const IDS_CIBLES = ["spe1", "spe2", "philo", "grand-oral"];
+
+/**
+ * Construit UNE FOIS les champs de notes cibles (écran Résultats).
+ * Construits une seule fois pour ne pas perdre le focus pendant la saisie :
+ * seuls les verdicts du comparateur sont recalculés à chaque frappe.
+ */
+export function initCibles(state, data, onChange) {
+  const conteneur = $("#liste-cibles");
+  conteneur.innerHTML = "";
+
+  for (const id of IDS_CIBLES) {
+    const ep = data.epreuvesTerminales.find((e) => e.id === id);
+    const ligne = document.createElement("div");
+    ligne.className = "note-row note-row--projete card card--flat";
+    ligne.innerHTML = `
+      <div class="note-row__info">
+        <p class="note-row__label" id="lbl-cible-${id}"></p>
+        <p class="note-row__meta">Coef ${ep.coef} · Note visée</p>
+      </div>
+      <div class="note-row__input">
+        <input type="text" inputmode="decimal" placeholder="—" id="cible-${id}"
+               aria-label="Note cible, ${ep.label ?? id}, sur 20">
+        <span class="note-row__sur">/20</span>
+      </div>`;
+    conteneur.appendChild(ligne);
+
+    const champ = ligne.querySelector("input");
+    champ.value = versChamp(state.cibles[id]);
+    champ.addEventListener("input", () => {
+      const note = parseNote(champ.value, data.regles);
+      champ.classList.toggle("is-invalid", champ.value.trim() !== "" && note === null);
+      if (note === null) delete state.cibles[id];
+      else state.cibles[id] = note;
+      onChange();
+    });
+  }
+  majLabelsCibles(state, data);
+}
+
+/** Met à jour les intitulés des cibles (les spés portent leur vrai nom). */
+export function majLabelsCibles(state, data) {
+  const conserves = spesConservees(state);
+  const nomSpe = (id) => (data.specialites.find((s) => s.id === id) || { label: "Spécialité" }).label;
+  const labels = {
+    spe1: conserves[0] ? nomSpe(conserves[0]) : "Spécialité 1",
+    spe2: conserves[1] ? nomSpe(conserves[1]) : "Spécialité 2",
+    philo: "Philosophie",
+    "grand-oral": "Grand oral",
+  };
+  for (const id of IDS_CIBLES) {
+    const element = document.getElementById(`lbl-cible-${id}`);
+    if (element) element.textContent = labels[id];
+  }
+}
+
+/**
+ * Comparateur A / B : A = hypothèses actuelles, B = notes cibles.
+ * B est calculée en clonant l'état et en interrogeant le moteur — jamais
+ * en dupliquant ses formules.
+ */
+function renderComparateur(state, resultats, data) {
+  const a = resultats.synthese;
+
+  /* Clone : les cibles remplacent les hypothèses d'épreuves (champ vide =
+     l'hypothèse actuelle est conservée). */
+  const clone = JSON.parse(JSON.stringify(state));
+  for (const id of IDS_CIBLES) {
+    if (state.cibles[id] !== undefined) clone.notes.epreuves[id] = state.cibles[id];
+  }
+  const b = calculerTout(clone, data).synthese;
+
+  $("#comp-a-moyenne").textContent = fmt(a.moyenneProjetee, 2);
+  $("#comp-a-mention").textContent = a.mentionActuelle ? a.mentionActuelle.label : "—";
+  $("#comp-b-moyenne").textContent = fmt(b.moyenneProjetee, 2);
+  $("#comp-b-mention").textContent = b.mentionActuelle ? b.mentionActuelle.label : "—";
+
+  const delta = (b.moyenneProjetee ?? 0) - (a.moyenneProjetee ?? 0);
+  const signe = delta > 0.005 ? "+" : "";
+  $("#comp-delta").textContent =
+    a.moyenneProjetee === null || b.moyenneProjetee === null || Math.abs(delta) < 0.005
+      ? "="
+      : `${signe}${fmt(delta, 2)}`;
+}
+
+/**
+ * Carte rattrapage : visible uniquement en zone 8 ≤ moyenne < 10.
+ * L'élève choisit 2 matières parmi les épreuves écrites du 1er groupe ;
+ * l'app affiche les notes d'oral nécessaires pour atteindre 10/20.
+ */
+function renderRattrapage(state, resultats, data) {
+  const carte = $("#carte-rattrapage");
+  const rattrapage = simulerRattrapage(resultats.grille, data);
+
+  carte.hidden = !rattrapage.concerne;
+  if (!rattrapage.concerne) return;
+
+  $("#rattrapage-intro").innerHTML =
+    `Avec ${fmt(rattrapage.moyenne, 2)}/20 de moyenne projetée, tu passerais les oraux du
+     2d groupe. Il te manque <strong>${fmt(rattrapage.pointsManquants, 0)} points</strong>
+     pour atteindre 10/20 — la meilleure note (écrit ou oral) est conservée.
+     Choisis les <strong>2 matières</strong> que tu repasserais :`;
+
+  /* Chips de sélection (2 max), persistées dans state.rattrapage */
+  const conteneur = $("#rattrapage-matieres");
+  conteneur.innerHTML = "";
+  state.rattrapage = (state.rattrapage || []).filter((id) =>
+    rattrapage.matieres.some((m) => m.id === id));
+  const pleines = state.rattrapage.length >= 2;
+
+  for (const matiere of rattrapage.matieres) {
+    const choisie = state.rattrapage.includes(matiere.id);
+    const label = document.createElement("label");
+    label.className = "chip" + (!choisie && pleines ? " chip--disabled" : "");
+    label.innerHTML = `<input type="checkbox" value="${matiere.id}"
+      ${choisie ? "checked" : ""} ${!choisie && pleines ? "disabled" : ""}>
+      <span>${matiere.label} <small>coef ${matiere.coef} · écrit ${fmt(matiere.note)}</small></span>`;
+    label.querySelector("input").addEventListener("change", (e) => {
+      if (e.target.checked) state.rattrapage.push(matiere.id);
+      else state.rattrapage = state.rattrapage.filter((id) => id !== matiere.id);
+      renderRattrapage(state, resultats, data); // re-render local
+    });
+    conteneur.appendChild(label);
+  }
+
+  /* Verdict */
+  const zone = $("#rattrapage-resultat");
+  if (state.rattrapage.length !== 2) {
+    zone.innerHTML = `<div class="rattrapage__verdict">Sélectionne 2 matières pour
+      voir les notes d'oral nécessaires. Astuce : plus le coefficient est
+      élevé, moins l'oral doit être haut.</div>`;
+    return;
+  }
+
+  const paire = state.rattrapage.map((id) => rattrapage.matieres.find((m) => m.id === id));
+  const verdict = oralsRattrapage(paire, rattrapage.pointsManquants);
+  if (verdict.faisable) {
+    zone.innerHTML = `<div class="rattrapage__verdict rattrapage__verdict--ok">
+      ✓ Jouable ! Notes d'oral à viser :
+      ${verdict.oraux.map((o) => `<strong>${o.label} : ${fmt(o.oral)}/20</strong> (écrit : ${fmt(o.note)})`).join(" · ")}
+      </div>`;
+  } else {
+    zone.innerHTML = `<div class="rattrapage__verdict rattrapage__verdict--ko">
+      ✗ Même avec 20/20 aux deux oraux, ces matières ne suffisent pas —
+      essaie une combinaison à plus forts coefficients.</div>`;
   }
 }

@@ -17,6 +17,7 @@ import {
   arrondiDixiemeSuperieur, parseNote, normaliserNote,
   buildGrille, validerParcours, calculerSynthese, mentionPour,
   notesMinimales, genererScenarios, indiceFaisabilite, calculerTout,
+  simulerRattrapage, oralsRattrapage,
 } from "./calculator.js";
 
 /* ----------------------------------------------------------------------------
@@ -234,6 +235,63 @@ test("calculerTout : structure complète, sans erreur de parcours", () => {
   egal(Array.isArray(tout.grille), true);
   egal(tout.scenarios.length, 4);
   egal(tout.conseils.length > 0, true);
+});
+
+/* --- 10. Rattrapage (2d groupe) — v1.1 ------------------------------------ */
+
+/** Élève « à 9 partout » : moyenne 9, il manque 100 points (coef 100). */
+function etatNeuf() {
+  const etat = etatReference();
+  for (const cle of Object.keys(etat.notes.epreuves))    etat.notes.epreuves[cle] = 9;
+  for (const cle of Object.keys(etat.notes.ccPremiere))  etat.notes.ccPremiere[cle] = 9;
+  for (const cle of Object.keys(etat.notes.ccTerminale)) etat.notes.ccTerminale[cle] = 9;
+  return etat;
+}
+
+test("Rattrapage : élève à 9/20 → concerné, 100 points manquants", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  egal(r.concerne, true);
+  egal(r.pointsManquants, 100, 0.001);
+  egal(r.matieres.length, 4); // français écrit, philo, spé 1, spé 2
+});
+
+test("Rattrapage : une spé seule (coef 16) exige 9 + 100/16 = 15,25 à l'oral", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const spe = r.matieres.find((m) => m.id === "spe1");
+  egal(spe.oralSeul, 15.25, 0.001);
+  egal(spe.oralSeulFaisable, true);
+});
+
+test("Rattrapage : le français seul (coef 5) est infaisable (9 + 20 = 29)", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const fr = r.matieres.find((m) => m.id === "fr-ecrit");
+  egal(fr.oralSeulFaisable, false);
+});
+
+test("Rattrapage : paire spé 1 + spé 2 → 12,2 à chaque oral (arrondi sup.)", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const paire = r.matieres.filter((m) => m.id === "spe1" || m.id === "spe2");
+  const resultat = oralsRattrapage(paire, r.pointsManquants);
+  egal(resultat.faisable, true);
+  // 9 + 100/32 = 12,125 → arrondi prudent au dixième supérieur : 12,2
+  egal(resultat.oraux[0].oral, 12.2, 0.001);
+  egal(resultat.oraux[1].oral, 12.2, 0.001);
+});
+
+test("Rattrapage : saturation à 20 → l'effort bascule sur l'autre matière", () => {
+  const paire = [
+    { id: "philo", label: "Philosophie", coef: 8,  note: 18 },
+    { id: "spe1",  label: "Maths",       coef: 16, note: 9 },
+  ];
+  const resultat = oralsRattrapage(paire, 100); // hausse égale : +100/24 ≈ 4,2 → philo > 20
+  egal(resultat.faisable, true);
+  egal(resultat.oraux[0].oral, 20, 0.001);            // philo plafonnée
+  egal(resultat.oraux[1].oral, 14.3, 0.001);          // 9 + (100−16)/16 = 14,25 → 14,3
+});
+
+test("Rattrapage : élève à 13 → non concerné", () => {
+  const r = simulerRattrapage(buildGrille(etatReference(), BAC_DATA), BAC_DATA);
+  egal(r.concerne, false);
 });
 
 /* ============================================================================

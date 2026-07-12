@@ -283,6 +283,37 @@
         <div class="scenarios" id="liste-scenarios"></div>
       </div>
 
+      <!-- Rattrapage (2d groupe) : visible seulement entre 8 et 10 de moyenne -->
+      <div class="card card--rattrapage" id="carte-rattrapage" hidden>
+        <p class="eyebrow">Rattrapage (épreuves du 2d groupe)</p>
+        <p class="card__note" id="rattrapage-intro"></p>
+        <div class="chips" id="rattrapage-matieres" role="group"
+             aria-label="Choisis les 2 matières à repasser à l'oral"></div>
+        <div id="rattrapage-resultat" aria-live="polite"></div>
+      </div>
+
+      <!-- Notes cibles (mode manuel) + comparateur « Et si ? » -->
+      <div class="card" id="carte-cibles">
+        <p class="eyebrow">Et si… ? — Mes notes cibles</p>
+        <p class="card__note">Fixe TES notes visées aux épreuves de Terminale :
+          la colonne B montre ce que ça donnerait, comparé à tes hypothèses
+          actuelles (colonne A). Champs vides = hypothèses actuelles.</p>
+        <div id="liste-cibles"></div>
+        <div class="comparateur">
+          <div class="comparateur__colonne">
+            <span class="bandeau__label">A · Hypothèses actuelles</span>
+            <strong class="num" id="comp-a-moyenne">—</strong>
+            <span id="comp-a-mention" class="comparateur__mention">—</span>
+          </div>
+          <div class="comparateur__delta num" id="comp-delta" aria-live="polite">—</div>
+          <div class="comparateur__colonne">
+            <span class="bandeau__label">B · Mes notes cibles</span>
+            <strong class="num" id="comp-b-moyenne">—</strong>
+            <span id="comp-b-mention" class="comparateur__mention">—</span>
+          </div>
+        </div>
+      </div>
+
       <div class="card card--assistant">
         <p class="eyebrow">L'assistant</p>
         <ul class="conseils" id="liste-conseils" aria-live="polite"></ul>
@@ -319,6 +350,19 @@
           <p class="eyebrow">Note requise par mention</p>
           <div class="chart-slot"><canvas id="chart-mentions" aria-label="Note moyenne requise pour chaque mention" role="img"></canvas></div>
         </div>
+        <div class="card card--chart" id="carte-historique" hidden>
+          <p class="eyebrow">Évolution de ma moyenne projetée</p>
+          <div class="chart-slot"><canvas id="chart-historique" aria-label="Évolution de la moyenne projetée dans le temps" role="img"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card card--flat">
+        <p class="card__note">Épingle régulièrement ta moyenne (une fois par jour
+          maximum) pour suivre ta progression sur l'année de Terminale. Un point
+          est aussi épinglé automatiquement à chaque première visite du jour.</p>
+        <button type="button" class="btn btn--ghost" id="btn-epingler">
+          📌 Épingler ma moyenne du jour
+        </button>
       </div>
 
       <div class="form__nav">
@@ -339,6 +383,18 @@
         <button type="button" class="btn btn--primary" id="btn-pdf">
           Télécharger le bilan PDF
         </button>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">Partager ma simulation</p>
+        <p class="card__note">Génère un lien qui contient toute ta simulation
+          (parcours, notes, profil) — la personne qui l'ouvre la retrouve à
+          l'identique, sans aucun serveur. Ne le partage qu'avec des personnes
+          de confiance.</p>
+        <button type="button" class="btn btn--primary" id="btn-partager">
+          Copier le lien de partage
+        </button>
+        <p class="card__note" id="partage-feedback" role="status" hidden></p>
       </div>
 
       <div class="card">

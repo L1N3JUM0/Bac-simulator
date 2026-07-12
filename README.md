@@ -16,7 +16,8 @@ réussite au baccalauréat : points acquis, notes minimales à viser, scénarios
 | 2 | `bacData.js` + `calculator.js` (moteur de calcul) + tests | ✅ |
 | 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ✅ |
 | 4 | Tableau de bord Chart.js + assistant | ✅ |
-| 5 | Export PDF, PWA activée, accessibilité finale, zoom graphiques | ✅ **← livré : v1.0** |
+| 5 | Export PDF, PWA activée, accessibilité finale, zoom graphiques | ✅ v1.0 |
+| 6 | Rattrapage, notes cibles + comparateur, partage par lien, suivi dans le temps | ✅ **← livré : v1.1** |
 
 ## Lancer le projet en local
 
@@ -69,6 +70,28 @@ assets/libs/        Chart.js 4.5.1 + jsPDF 4.2.1 embarqués (hors ligne)
 CONCEPTION.md       Document de conception validé (règles officielles, algorithmes)
 ```
 
+## Nouveautés v1.1
+
+- **Rattrapage (2d groupe)** : entre 8 et 10 de moyenne projetée, une carte
+  dédiée apparaît dans les Résultats. Choix de 2 matières parmi les épreuves
+  écrites (français, philo, spécialités) → notes d'oral nécessaires pour
+  atteindre 10/20, avec report automatique si une matière sature à 20
+  (la meilleure des deux notes est conservée, conformément à la règle).
+- **Notes cibles & comparateur « Et si ? »** : fixe tes propres notes visées
+  aux 4 épreuves de Terminale ; la colonne B affiche la moyenne et la mention
+  obtenues, comparées à tes hypothèses actuelles (colonne A), avec l'écart.
+- **Partage par lien** (écran Réglages) : la simulation complète est encodée
+  dans l'URL (aucun serveur). La personne qui ouvre le lien retrouve la
+  simulation à l'identique, après confirmation si elle en avait déjà une.
+  L'historique personnel ne voyage pas dans le lien.
+- **Suivi dans le temps** : un point « moyenne projetée » est épinglé
+  automatiquement à la première visite de chaque jour (et à la demande via le
+  bouton 📌 du tableau de bord). Dès deux points, un 5e graphique trace
+  l'évolution sur l'année.
+- Schéma de sauvegarde **v2** avec migration automatique depuis la v1
+  (aucune donnée perdue pour les utilisateurs existants) ; cache PWA passé
+  en `bac-simulator-v2`.
+
 ## PWA & hors ligne (étape 5)
 
 Le service worker est **actif** : à la première visite, tous les fichiers
@@ -120,7 +143,7 @@ des migrations futures sans perte de données.
 
 ## Tests du moteur de calcul
 
-Le moteur (`calculator.js`) est couvert par **30 tests** (`tests.js`).
+Le moteur (`calculator.js`) est couvert par **36 tests** (`tests.js`).
 Deux façons de les lancer :
 
 - **Navigateur** : ouvrir `tests.html` (via le serveur local) → rapport visuel.

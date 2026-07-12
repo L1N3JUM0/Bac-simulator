@@ -840,3 +840,66 @@ input.is-invalid { border-color: var(--marge) !important; }
 .modale__entete .eyebrow { margin: 0; }
 .modale__canvas { flex: 1; position: relative; min-height: 0; }
 .modale__canvas canvas { width: 100% !important; height: 100% !important; }
+
+/* ----------------------------------------------------------------------------
+   19. v1.1 — RATTRAPAGE, NOTES CIBLES & COMPARATEUR
+   --------------------------------------------------------------------------- */
+
+/* Carte rattrapage : marge rouge, on est en zone d'alerte */
+.card--rattrapage { border-left: var(--marge-w) solid var(--marge); }
+.rattrapage__verdict {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+.rattrapage__verdict--ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.rattrapage__verdict--ko { background: color-mix(in srgb, var(--marge) 10%, transparent); }
+
+/* Comparateur A / B */
+.comparateur {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 14px;
+  text-align: center;
+}
+.comparateur__colonne {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.comparateur__colonne strong { font-size: 24px; }
+.comparateur__mention { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.comparateur__delta {
+  align-self: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 54px;
+}
+
+/* ----------------------------------------------------------------------------
+   20. CORRECTIF v1.1.1 — modale de zoom sur mobile
+   Le conteneur du canvas doit avoir une hauteur RÉELLE avant que Chart.js
+   dessine, sinon le graphique agrandi apparaît vide (carré blanc).
+   --------------------------------------------------------------------------- */
+.modale__canvas {
+  flex: 1 1 auto;
+  position: relative;
+  min-height: 260px;      /* garantit une surface de dessin dès l'ouverture */
+  width: 100%;
+}
+.modale__contenu {
+  /* hauteur stable sur mobile (évite le conteneur qui s'effondre) */
+  height: min(86dvh, 640px);
+  min-height: 360px;
+}
+
+/* Bouton fermer de la modale : zone tactile confortable (min. 44px) */
+#modale-fermer { width: 44px; height: 44px; }

@@ -34,14 +34,31 @@ function etatInitial() {
     options: { premiere: [], terminale: [] },
     saisieCC: "moyenne",                        // "moyenne" | "trimestres"
     notes: { epreuves, ccPremiere: {}, ccTerminale: {} },
+    cibles: {},                                 // v1.1 : notes cibles par épreuve
+    rattrapage: [],                             // v1.1 : matières du 2d groupe
+    historique: [],                             // v1.1 : [{date, moyenne}]
     ui: { theme: "auto", ecranCourant: "accueil" },
     meta: { creeLe: new Date().toISOString(), modifieLe: null },
   };
 }
 
+/* v1.1 — Un lien de partage (#sim=…) est-il présent dans l'URL ?
+   Si oui, et après confirmation, il remplace la simulation locale. */
+let etatPartage = storage.depuisLien();
+if (etatPartage) {
+  const accepte = !storage.hasSave() || window.confirm(
+    "Ce lien contient une simulation partagée.\n" +
+    "L'ouvrir remplacera ta simulation actuelle sur cet appareil. Continuer ?"
+  );
+  if (!accepte) etatPartage = null;
+  // Le fragment est retiré de l'URL dans tous les cas (il contient des notes)
+  history.replaceState(null, "", location.pathname + location.search);
+}
+
 /* Reprise éventuelle d'une simulation sauvegardée */
-const sauvegarde = storage.load();
+const sauvegarde = etatPartage || storage.load();
 const state = sauvegarde || etatInitial();
+if (etatPartage) storage.save(state); // la simulation partagée devient la locale
 
 /* ----------------------------------------------------------------------------
    2. RECALCUL & RENDU (le cœur de la boucle)
@@ -68,6 +85,7 @@ function recalculer() {
 function reconstruireParcours() {
   ui.renderOptions(state, BAC_DATA, reconstruireParcours);
   ui.renderNotes(state, BAC_DATA, recalculer);
+  ui.majLabelsCibles(state, BAC_DATA);
   recalculer();
 }
 
@@ -212,6 +230,44 @@ document.getElementById("btn-pdf").addEventListener("click", () => {
   genererPDF(state, derniersResultats, BAC_DATA);
 });
 
+/* v1.1 — Partage par lien : l'état complet voyage dans l'URL (aucun serveur) */
+document.getElementById("btn-partager").addEventListener("click", async () => {
+  const lien = storage.versLien(state);
+  const feedback = document.getElementById("partage-feedback");
+  try {
+    await navigator.clipboard.writeText(lien);
+    feedback.textContent = "✓ Lien copié ! Colle-le dans un message pour partager ta simulation.";
+  } catch {
+    // Presse-papier indisponible (permissions) : on affiche le lien
+    feedback.textContent = lien;
+  }
+  feedback.hidden = false;
+});
+
+/* v1.1 — Épinglage de la moyenne du jour (suivi dans le temps).
+   Un point par jour maximum : ré-épingler remplace le point du jour. */
+function epingler(automatique = false) {
+  if (!derniersResultats) return;
+  const moyenne = derniersResultats.synthese.moyenneProjetee;
+  if (moyenne === null) return; // rien à épingler sans aucune note
+
+  const aujourdHui = new Date().toISOString().slice(0, 10); // AAAA-MM-JJ
+  const dernier = state.historique[state.historique.length - 1];
+  if (dernier && dernier.date === aujourdHui) {
+    if (automatique) return;            // l'auto n'écrase pas le point du jour
+    dernier.moyenne = Math.round(moyenne * 100) / 100;
+  } else {
+    state.historique.push({ date: aujourdHui, moyenne: Math.round(moyenne * 100) / 100 });
+    if (state.historique.length > 120) state.historique.shift(); // borne mémoire
+  }
+  storage.save(state);
+  if (state.ui.ecranCourant === "dashboard") {
+    ui.renderDashboard(state, derniersResultats, BAC_DATA);
+  }
+}
+
+document.getElementById("btn-epingler").addEventListener("click", () => epingler(false));
+
 /* ----------------------------------------------------------------------------
    7. PWA : service worker (hors ligne) + proposition d'installation
    --------------------------------------------------------------------------- */
@@ -264,6 +320,8 @@ ui.remplirAcademies(state, BAC_DATA);
 ui.bindProfil(state, recalculer);
 ui.initTabs();
 ui.initModaleGraphiques();
+ui.initCibles(state, BAC_DATA, recalculer);   // v1.1 : notes cibles (une fois)
 ui.renderSpecialites(state, BAC_DATA, reconstruireParcours);
 reconstruireParcours();          // options + notes + premier calcul
-afficherEcran("accueil");        // on démarre toujours sur l'accueil
+epingler(true);                  // v1.1 : un point d'historique par jour, auto
+afficherEcran(etatPartage ? "resultats" : "accueil"); // lien partagé → résultats
