@@ -787,3 +787,56 @@ input.is-invalid { border-color: var(--marge) !important; }
 .chart-slot { position: relative; padding: 8px; }
 .chart-slot--pret { background: transparent; }
 .chart-slot canvas { width: 100% !important; height: 100% !important; }
+
+/* ----------------------------------------------------------------------------
+   18. ÉTAPE 5 — LIEN D'ÉVITEMENT, MODALE PLEIN ÉCRAN
+   --------------------------------------------------------------------------- */
+
+/* Lien d'évitement : invisible jusqu'au focus clavier */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-radius: 0 0 12px 0;
+  font-weight: 700;
+  text-decoration: none;
+}
+.skip-link:focus { left: 0; top: 0; }
+
+/* Les graphiques sont cliquables (agrandissement) */
+.card--chart .chart-slot { cursor: zoom-in; transition: box-shadow var(--transition); }
+.card--chart .chart-slot:hover { box-shadow: var(--shadow-sm); }
+
+/* Modale plein écran */
+.no-scroll { overflow: hidden; }
+.modale {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  backdrop-filter: blur(4px);
+}
+.modale__contenu {
+  width: min(96vw, 900px);
+  height: min(86dvh, 640px);
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  box-shadow: var(--shadow);
+}
+.modale__entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.modale__entete .eyebrow { margin: 0; }
+.modale__canvas { flex: 1; position: relative; min-height: 0; }
+.modale__canvas canvas { width: 100% !important; height: 100% !important; }

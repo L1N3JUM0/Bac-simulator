@@ -32,7 +32,7 @@ const FICHIERS = [
   "./assets/icons/icon-maskable-512.png",
   "./assets/icons/apple-touch-icon.png",
   "./assets/libs/chart.umd.min.js",
-  // Étape 5 : "./assets/libs/jspdf.umd.min.js"
+  "./assets/libs/jspdf.umd.min.js",
 ];
 
 /* Installation : pré-cache de tous les fichiers. */

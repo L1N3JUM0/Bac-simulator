@@ -15,8 +15,8 @@ réussite au baccalauréat : points acquis, notes minimales à viser, scénarios
 | 1 | Arborescence, HTML complet, CSS complet, squelettes JS, icônes PWA | ✅ |
 | 2 | `bacData.js` + `calculator.js` (moteur de calcul) + tests | ✅ |
 | 3 | `ui.js` + `storage.js` (application interactive, sauvegarde) | ✅ |
-| 4 | Tableau de bord Chart.js + assistant | ✅ **← livré** |
-| 5 | Export PDF, PWA activée, accessibilité finale | ⏳ |
+| 4 | Tableau de bord Chart.js + assistant | ✅ |
+| 5 | Export PDF, PWA activée, accessibilité finale, zoom graphiques | ✅ **← livré : v1.0** |
 
 ## Lancer le projet en local
 
@@ -65,9 +65,37 @@ pdf.js              Export du bilan PDF (jsPDF)
 manifest.json       PWA (installation Android / iOS)
 service-worker.js   Cache hors ligne (activé à l'étape 5)
 assets/icons/       Icônes PWA (192, 512, maskable, apple-touch)
-assets/libs/        Chart.js 4.5.1 embarqué (jsPDF à l'étape 5)
+assets/libs/        Chart.js 4.5.1 + jsPDF 4.2.1 embarqués (hors ligne)
 CONCEPTION.md       Document de conception validé (règles officielles, algorithmes)
 ```
+
+## PWA & hors ligne (étape 5)
+
+Le service worker est **actif** : à la première visite, tous les fichiers
+(bibliothèques comprises) sont mis en cache — l'application fonctionne
+ensuite entièrement hors ligne. Installation :
+
+- **Android / ordinateur** : bouton « Installer sur cet appareil » (écran
+  Réglages) ou menu du navigateur → « Installer l'application ».
+- **iPhone / iPad** : Safari → Partager → « Sur l'écran d'accueil ».
+
+⚠️ Après chaque mise à jour du site, **incrémenter `NOM_CACHE`** dans
+`service-worker.js` (`bac-simulator-v1` → `-v2`…) pour que les visiteurs
+reçoivent la nouvelle version au rechargement suivant.
+
+## Export PDF (étape 5)
+
+Le bouton « Télécharger le bilan PDF » (écran Réglages) génère un document
+A4 complet : identité, synthèse, grille notes/coefficients, scénarios et
+les 4 graphiques (re-rendus hors écran en thème clair pour l'impression).
+Aucune donnée ne quitte l'appareil : le PDF est fabriqué localement par
+jsPDF.
+
+## Agrandir un graphique
+
+Sur le tableau de bord, chaque graphique se touche (ou s'active au clavier :
+Tab puis Entrée) pour s'ouvrir en plein écran — pratique sur téléphone.
+Fermeture : bouton ✕, touche Échap, ou clic hors du cadre.
 
 ## Tableau de bord (étape 4)
 

@@ -523,16 +523,24 @@ export function initTabs() {
 }
 
 /* ----------------------------------------------------------------------------
-   9. TABLEAU DE BORD — 4 graphiques Chart.js (étape 4)
+   9. TABLEAU DE BORD — 4 graphiques Chart.js (étapes 4-5)
    ---------------------------------------------------------------------------
    Chart.js est chargé en global (window.Chart) depuis assets/libs/.
-   Les graphiques sont détruits puis recréés à chaque affichage : c'est
-   instantané à cette échelle et cela suit automatiquement le thème
-   clair/sombre (les couleurs sont relues dans les variables CSS).
+
+   Architecture « fabriques » : chaque graphique est décrit par une FONCTION
+   qui produit une configuration Chart.js fraîche. La même fabrique sert :
+     · au petit format du tableau de bord ;
+     · à l'agrandissement plein écran (modale) ;
+     · à l'export PDF (rendu hors écran, thème clair forcé).
+   Chart.js mutant ses objets de configuration, chaque instance reçoit
+   ainsi sa propre copie — aucun conflit entre les rendus.
    --------------------------------------------------------------------------- */
 
-/** Instances Chart.js vivantes, par id de canvas. */
+/** Instances Chart.js vivantes du tableau de bord, par id de canvas. */
 const graphiques = {};
+
+/** Dernières fabriques construites (réutilisées par la modale de zoom). */
+let fabriquesCourantes = null;
 
 /** Lit une variable CSS du thème courant (ex. "--accent"). */
 function couleurTheme(nom) {
@@ -545,33 +553,14 @@ const PALETTE = [
   "#E4536B", "#8B5CF6", "#38BDF8", "#F97362", "#94A3B8",
 ];
 
-/** Crée (ou remplace) un graphique dans le canvas donné. */
-function creerGraphique(idCanvas, config) {
-  if (typeof window === "undefined" || !window.Chart) return; // lib absente (tests)
-  const canvas = document.getElementById(idCanvas);
-  if (!canvas) return;
-  const slot = canvas.closest(".chart-slot");
-  if (slot) slot.classList.add("chart-slot--pret");
-  if (graphiques[idCanvas]) graphiques[idCanvas].destroy();
-  graphiques[idCanvas] = new window.Chart(canvas, config);
-}
-
 /**
- * Construit / met à jour les 4 graphiques du tableau de bord.
- * Appelé à l'ouverture de l'écran et à chaque recalcul si l'écran est visible.
+ * Construit les 4 fabriques de graphiques pour l'état courant.
+ * Les couleurs du thème sont lues AU MOMENT de l'appel : pour un rendu
+ * en thème clair forcé (PDF), basculer data-theme avant d'appeler.
+ * @returns {Array<{id: string, titre: string, fabrique: () => object}>}
  */
-export function renderDashboard(state, resultats, data) {
-  if (typeof window === "undefined" || !window.Chart) return;
+export function configsDashboard(state, resultats, data) {
   const { grille, synthese, minimales } = resultats;
-
-  /* Réglages globaux : typographie du thème, animations sobres,
-     respect de prefers-reduced-motion. */
-  const Chart = window.Chart;
-  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-  Chart.defaults.color = couleurTheme("--ink-2");
-  Chart.defaults.borderColor = couleurTheme("--line");
-  const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  Chart.defaults.animation = reduit ? false : { duration: 350 };
 
   const accent = couleurTheme("--accent");
   const ok     = couleurTheme("--ok");
@@ -579,11 +568,13 @@ export function renderDashboard(state, resultats, data) {
   const marge  = couleurTheme("--marge");
   const ligne  = couleurTheme("--line");
   const encre  = couleurTheme("--ink");
+  const encre2 = couleurTheme("--ink-2");
+  const surface = couleurTheme("--surface");
+  const police = getComputedStyle(document.body).fontFamily;
 
-  /* ---- 1. Répartition des coefficients (donut) ------------------------- */
+  /* --- Données du donut des coefficients -------------------------------- */
   const parId = (id) => grille.find((l) => l.id === id);
   const sommeCoefs = (filtre) => grille.filter(filtre).reduce((s, l) => s + l.coef, 0);
-
   const groupes = [
     { label: "Français (écrit + oral)", coef: 10 },
     { label: "Maths anticipées",        coef: 2 },
@@ -599,136 +590,232 @@ export function renderDashboard(state, resultats, data) {
   const coefOptions = sommeCoefs((l) => l.categorie === "option");
   if (coefOptions > 0) groupes.push({ label: "Options", coef: coefOptions });
 
-  creerGraphique("chart-coefs", {
-    type: "doughnut",
-    data: {
-      labels: groupes.map((g) => g.label),
-      datasets: [{
-        data: groupes.map((g) => g.coef),
-        backgroundColor: PALETTE,
-        borderColor: couleurTheme("--surface"),
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10.5 } } },
-        tooltip: { callbacks: {
-          label: (ctx) => ` coef ${ctx.parsed} (${Math.round(ctx.parsed / synthese.coefTotal * 100)} %)`,
-        } },
-      },
-    },
-  });
+  /* --- Données de la barre de points ------------------------------------ */
+  const pointsMax = 20 * synthese.coefTotal;
+  const pointsRestants = pointsMax - synthese.pointsAcquis - synthese.pointsProjetes;
 
-  /* ---- 2. Points acquis / projetés / restants (barre empilée) ---------- */
-  const pointsRestants = 20 * synthese.coefTotal - synthese.pointsAcquis - synthese.pointsProjetes;
-  creerGraphique("chart-points", {
-    type: "bar",
-    data: {
-      labels: ["Points /" + 20 * synthese.coefTotal],
-      datasets: [
-        { label: "Acquis (1re)",        data: [synthese.pointsAcquis],   backgroundColor: accent },
-        { label: "Projetés (Tle)",      data: [synthese.pointsProjetes], backgroundColor: PALETTE[1] },
-        { label: "Restants (max)",      data: [Math.max(0, pointsRestants)], backgroundColor: ligne },
-      ],
-    },
-    options: {
-      indexAxis: "y",
-      maintainAspectRatio: false,
-      scales: {
-        x: { stacked: true, max: 20 * synthese.coefTotal, grid: { display: false } },
-        y: { stacked: true, display: false },
-      },
-      plugins: {
-        legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-        tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label} : ${Math.round(ctx.parsed.x)} pts` } },
-      },
-    },
-  });
-
-  /* ---- 3. Progression vers l'objectif (jauge donut + % au centre) ------ */
+  /* --- Données de la jauge d'objectif ------------------------------------ */
   const objectifPoints = Number(state.profil.objectif) * synthese.coefTotal;
   const atteint = Math.min(synthese.pointsAcquis + synthese.pointsProjetes, objectifPoints);
   const pourcentage = objectifPoints > 0 ? Math.round((atteint / objectifPoints) * 100) : 0;
 
-  creerGraphique("chart-progression", {
-    type: "doughnut",
-    data: {
-      labels: [`Atteint (acquis + hypothèses)`, "Reste à gagner"],
-      datasets: [{
-        data: [atteint, Math.max(0, objectifPoints - atteint)],
-        backgroundColor: [pourcentage >= 100 ? ok : accent, ligne],
-        borderWidth: 0,
-      }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      cutout: "72%",
-      plugins: {
-        legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-        tooltip: { callbacks: { label: (ctx) => ` ${Math.round(ctx.parsed)} pts` } },
-      },
-    },
-    plugins: [{
-      /* Plugin maison : pourcentage au centre de la jauge */
-      id: "texte-centre",
-      afterDraw(chart) {
-        const { ctx, chartArea } = chart;
-        ctx.save();
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = encre;
-        ctx.font = `800 26px ${Chart.defaults.font.family}`;
-        ctx.fillText(`${pourcentage} %`,
-          (chartArea.left + chartArea.right) / 2,
-          (chartArea.top + chartArea.bottom) / 2 - 4);
-        ctx.fillStyle = couleurTheme("--ink-2");
-        ctx.font = `600 10px ${Chart.defaults.font.family}`;
-        ctx.fillText(`de l'objectif ${state.profil.objectif}/20`,
-          (chartArea.left + chartArea.right) / 2,
-          (chartArea.top + chartArea.bottom) / 2 + 16);
-        ctx.restore();
-      },
-    }],
-  });
-
-  /* ---- 4. Note moyenne requise en Terminale, par mention ---------------- */
-  const seuils = data.mentions
-    .filter((m) => m.seuil >= 10)
-    .sort((a, b) => a.seuil - b.seuil);
-  // Une note requise par mention : on interroge simplement le moteur
-  // (pur et instantané), plutôt que de dupliquer sa formule ici.
+  /* --- Données des mentions : on interroge simplement le moteur ---------- */
+  const seuils = data.mentions.filter((m) => m.seuil >= 10).sort((a, b) => a.seuil - b.seuil);
   const requises = seuils.map((m) => notesMinimales(m.seuil, grille, data).noteUniforme);
 
-  creerGraphique("chart-mentions", {
-    type: "bar",
-    data: {
-      labels: seuils.map((m) => `${m.label} (≥${m.seuil})`),
-      datasets: [{
-        label: "Note requise /20 en Terminale",
-        data: requises.map((n) => Math.max(0, Math.min(20, n))),
-        backgroundColor: requises.map((n) =>
-          n > 20 ? marge
-          : synthese.moyenneActuelle !== null && n <= synthese.moyenneActuelle ? ok
-          : n > 16 ? warn : accent),
-        borderRadius: 6,
-      }],
-    },
-    options: {
-      maintainAspectRatio: false,
-      scales: { y: { min: 0, max: 20, ticks: { stepSize: 5 } } },
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: {
-          label: (ctx) => {
-            const reel = requises[ctx.dataIndex];
-            return reel > 20
-              ? ` Inaccessible (il faudrait ${reel.toFixed(1).replace(".", ",")}/20)`
-              : ` ${reel.toFixed(1).replace(".", ",")}/20 de moyenne requise`;
+  return [
+    {
+      id: "chart-coefs",
+      titre: "Répartition des coefficients",
+      fabrique: () => ({
+        type: "doughnut",
+        data: {
+          labels: groupes.map((g) => g.label),
+          datasets: [{
+            data: groupes.map((g) => g.coef),
+            backgroundColor: PALETTE,
+            borderColor: surface,
+            borderWidth: 2,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10.5 } } },
+            tooltip: { callbacks: {
+              label: (ctx) => ` coef ${ctx.parsed} (${Math.round(ctx.parsed / synthese.coefTotal * 100)} %)`,
+            } },
           },
-        } },
-      },
+        },
+      }),
     },
+    {
+      id: "chart-points",
+      titre: "Points acquis, projetés et restants",
+      fabrique: () => ({
+        type: "bar",
+        data: {
+          labels: [`Points / ${pointsMax}`],
+          datasets: [
+            { label: "Acquis (1re)",   data: [synthese.pointsAcquis],       backgroundColor: accent },
+            { label: "Projetés (Tle)", data: [synthese.pointsProjetes],     backgroundColor: PALETTE[1] },
+            { label: "Restants (max)", data: [Math.max(0, pointsRestants)], backgroundColor: ligne },
+          ],
+        },
+        options: {
+          indexAxis: "y",
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true, max: pointsMax, grid: { display: false } },
+            y: { stacked: true, display: false },
+          },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label} : ${Math.round(ctx.parsed.x)} pts` } },
+          },
+        },
+      }),
+    },
+    {
+      id: "chart-progression",
+      titre: "Progression vers l'objectif",
+      fabrique: () => ({
+        type: "doughnut",
+        data: {
+          labels: ["Atteint (acquis + hypothèses)", "Reste à gagner"],
+          datasets: [{
+            data: [atteint, Math.max(0, objectifPoints - atteint)],
+            backgroundColor: [pourcentage >= 100 ? ok : accent, ligne],
+            borderWidth: 0,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          cutout: "72%",
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
+            tooltip: { callbacks: { label: (ctx) => ` ${Math.round(ctx.parsed)} pts` } },
+          },
+        },
+        plugins: [{
+          /* Plugin maison : pourcentage au centre de la jauge */
+          id: "texte-centre",
+          afterDraw(chart) {
+            const { ctx, chartArea } = chart;
+            const cx = (chartArea.left + chartArea.right) / 2;
+            const cy = (chartArea.top + chartArea.bottom) / 2;
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = encre;
+            ctx.font = `800 26px ${police}`;
+            ctx.fillText(`${pourcentage} %`, cx, cy - 4);
+            ctx.fillStyle = encre2;
+            ctx.font = `600 10px ${police}`;
+            ctx.fillText(`de l'objectif ${state.profil.objectif}/20`, cx, cy + 16);
+            ctx.restore();
+          },
+        }],
+      }),
+    },
+    {
+      id: "chart-mentions",
+      titre: "Note moyenne requise en Terminale, par mention",
+      fabrique: () => ({
+        type: "bar",
+        data: {
+          labels: seuils.map((m) => `${m.label} (≥${m.seuil})`),
+          datasets: [{
+            label: "Note requise /20 en Terminale",
+            data: requises.map((n) => Math.max(0, Math.min(20, n))),
+            backgroundColor: requises.map((n) =>
+              n > 20 ? marge
+              : synthese.moyenneActuelle !== null && n <= synthese.moyenneActuelle ? ok
+              : n > 16 ? warn : accent),
+            borderRadius: 6,
+          }],
+        },
+        options: {
+          maintainAspectRatio: false,
+          scales: { y: { min: 0, max: 20, ticks: { stepSize: 5 } } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: {
+              label: (ctx) => {
+                const reel = requises[ctx.dataIndex];
+                return reel > 20
+                  ? ` Inaccessible (il faudrait ${reel.toFixed(1).replace(".", ",")}/20)`
+                  : ` ${reel.toFixed(1).replace(".", ",")}/20 de moyenne requise`;
+              },
+            } },
+          },
+        },
+      }),
+    },
+  ];
+}
+
+/** Crée (ou remplace) un graphique dans le canvas donné. */
+function creerGraphique(idCanvas, config) {
+  if (typeof window === "undefined" || !window.Chart) return; // lib absente (tests)
+  const canvas = document.getElementById(idCanvas);
+  if (!canvas) return;
+  const slot = canvas.closest(".chart-slot");
+  if (slot) slot.classList.add("chart-slot--pret");
+  if (graphiques[idCanvas]) graphiques[idCanvas].destroy();
+  graphiques[idCanvas] = new window.Chart(canvas, config);
+}
+
+/**
+ * Construit / met à jour les 4 graphiques du tableau de bord.
+ * Appelé à l'ouverture de l'écran, à chaque recalcul si l'écran est visible,
+ * et au changement de thème.
+ */
+export function renderDashboard(state, resultats, data) {
+  if (typeof window === "undefined" || !window.Chart) return;
+
+  /* Réglages globaux : typographie et couleurs du thème, animations sobres */
+  const Chart = window.Chart;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = couleurTheme("--ink-2");
+  Chart.defaults.borderColor = couleurTheme("--line");
+  const reduit = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  Chart.defaults.animation = reduit ? false : { duration: 350 };
+
+  fabriquesCourantes = configsDashboard(state, resultats, data);
+  for (const entree of fabriquesCourantes) {
+    creerGraphique(entree.id, entree.fabrique());
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   10. MODALE « GRAPHIQUE EN PLEIN ÉCRAN » (étape 5)
+   Chaque emplacement de graphique est cliquable (et actionnable au clavier) ;
+   le graphique s'ouvre en grand dans une boîte de dialogue accessible.
+   --------------------------------------------------------------------------- */
+
+let graphiqueZoom = null;      // instance Chart de la modale
+let focusAvantModale = null;   // pour rendre le focus à la fermeture
+
+export function initModaleGraphiques() {
+  const modale = document.getElementById("modale-graph");
+  if (!modale) return;
+  const boutonFermer = document.getElementById("modale-fermer");
+
+  function fermer() {
+    modale.hidden = true;
+    document.body.classList.remove("no-scroll");
+    if (graphiqueZoom) { graphiqueZoom.destroy(); graphiqueZoom = null; }
+    if (focusAvantModale) { focusAvantModale.focus(); focusAvantModale = null; }
+  }
+
+  boutonFermer.addEventListener("click", fermer);
+  modale.addEventListener("click", (e) => { if (e.target === modale) fermer(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modale.hidden) fermer();
   });
+
+  for (const slot of document.querySelectorAll(".card--chart .chart-slot")) {
+    slot.tabIndex = 0;
+    slot.setAttribute("role", "button");
+    slot.setAttribute("aria-label", "Agrandir le graphique en plein écran");
+
+    const ouvrir = () => {
+      const canvas = slot.querySelector("canvas");
+      const entree = fabriquesCourantes?.find((c) => c.id === canvas.id);
+      if (!entree || !window.Chart) return;
+      focusAvantModale = document.activeElement;
+      document.getElementById("modale-titre").textContent = entree.titre;
+      modale.hidden = false;
+      document.body.classList.add("no-scroll");
+      if (graphiqueZoom) graphiqueZoom.destroy();
+      graphiqueZoom = new window.Chart(document.getElementById("chart-zoom"), entree.fabrique());
+      boutonFermer.focus();
+    };
+
+    slot.addEventListener("click", ouvrir);
+    slot.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ouvrir(); }
+    });
+  }
 }

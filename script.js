@@ -13,6 +13,7 @@
 
 import { BAC_DATA } from "./bacData.js";
 import { calculerTout, normaliserNote } from "./calculator.js";
+import { genererPDF } from "./pdf.js";
 import * as ui from "./ui.js";
 import * as storage from "./storage.js";
 
@@ -204,19 +205,65 @@ switchTrimestres.addEventListener("change", () => {
 });
 
 /* ----------------------------------------------------------------------------
-   6. SERVICE WORKER (PWA) — activé à l'étape 5
+   6. EXPORT PDF
    --------------------------------------------------------------------------- */
-// if ("serviceWorker" in navigator) {
-//   navigator.serviceWorker.register("service-worker.js");
-// }
+document.getElementById("btn-pdf").addEventListener("click", () => {
+  if (!derniersResultats) recalculer();
+  genererPDF(state, derniersResultats, BAC_DATA);
+});
 
 /* ----------------------------------------------------------------------------
-   7. DÉMARRAGE
+   7. PWA : service worker (hors ligne) + proposition d'installation
+   --------------------------------------------------------------------------- */
+if ("serviceWorker" in navigator) {
+  // Chemin relatif : fonctionne aussi bien à la racine (Netlify) que dans un
+  // sous-dossier (GitHub Pages /Bac-simulator/).
+  navigator.serviceWorker.register("service-worker.js").catch((erreur) => {
+    console.warn("Service worker non enregistré :", erreur);
+  });
+}
+
+/* Android / desktop : on capture l'invite du navigateur pour proposer un
+   bouton « Installer » explicite sur l'écran Réglages. */
+let promptInstallation = null;
+const btnInstaller = document.getElementById("btn-installer");
+
+window.addEventListener("beforeinstallprompt", (evenement) => {
+  evenement.preventDefault();
+  promptInstallation = evenement;
+  btnInstaller.hidden = false;
+  document.getElementById("install-indispo").hidden = true;
+});
+
+btnInstaller.addEventListener("click", async () => {
+  if (!promptInstallation) return;
+  promptInstallation.prompt();
+  await promptInstallation.userChoice;
+  promptInstallation = null;
+  btnInstaller.hidden = true;
+});
+
+/* iOS : pas d'invite automatique → instructions dédiées */
+const estIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+if (estIOS) {
+  document.getElementById("ios-install").hidden = false;
+} else {
+  document.getElementById("install-indispo").hidden = false;
+}
+
+window.addEventListener("appinstalled", () => {
+  btnInstaller.hidden = true;
+  document.getElementById("install-indispo").hidden = true;
+});
+
+/* ----------------------------------------------------------------------------
+   8. DÉMARRAGE
    --------------------------------------------------------------------------- */
 appliquerTheme(state.ui.theme);
 ui.remplirAcademies(state, BAC_DATA);
 ui.bindProfil(state, recalculer);
 ui.initTabs();
+ui.initModaleGraphiques();
 ui.renderSpecialites(state, BAC_DATA, reconstruireParcours);
 reconstruireParcours();          // options + notes + premier calcul
 afficherEcran("accueil");        // on démarre toujours sur l'accueil
