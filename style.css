@@ -712,13 +712,18 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); outline: n
   z-index: 30;
   width: min(calc(100% - 2 * var(--gap)), var(--maxw));
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: var(--shadow);
   padding: 10px 16px;
+}
+.bandeau__chiffres {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 .bandeau__item { text-align: center; min-width: 0; }
 .bandeau__label {
@@ -731,6 +736,100 @@ input[type="text"]:focus, select:focus { border-color: var(--accent); outline: n
 }
 .bandeau__item strong { font-size: 15px; }
 .bandeau__item--objectif strong { color: var(--accent); }
+
+/* ----------------------------------------------------------------------------
+   13 bis. JAUGE « POINTS DU BAC ACQUIS » (v1.2)
+   ---------------------------------------------------------------------------
+   Trois zones lisibles d'un coup d'œil :
+     · plein (encre)     = points DÉJÀ obtenus, définitifs
+     · hachuré           = points encore en jeu
+     · vide              = points déjà hors d'atteinte
+   Le trait vertical à 50 % marque les 1 000 points de l'admission.
+   --------------------------------------------------------------------------- */
+.jauge__entete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.jauge__label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+}
+.jauge__valeur { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.jauge__piste {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.jauge__remplissage {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  border-radius: 999px;
+  background: var(--accent); /* repli si color-mix() n'est pas supporté */
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--ok)));
+  transition: width 520ms cubic-bezier(.22, 1, .36, 1);
+}
+/* Zone « encore en jeu » : hachures discrètes, jamais confondues avec l'acquis */
+.jauge__enjeu {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--accent-soft); /* repli */
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 22%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+  transition: width 520ms cubic-bezier(.22, 1, .36, 1),
+              left 520ms cubic-bezier(.22, 1, .36, 1);
+}
+/* Repère des 1 000 points (admission) */
+.jauge__repere {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--marge);
+  opacity: 0.75;
+}
+.jauge__repere i { display: none; } /* libellé réservé aux grands écrans */
+
+.jauge__note {
+  margin: 5px 0 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ink-2);
+}
+
+@media (min-width: 560px) {
+  .jauge__repere i {
+    display: block;
+    position: absolute;
+    left: 6px;
+    top: -1px;
+    font-size: 9.5px;
+    font-style: normal;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--marge);
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jauge__remplissage, .jauge__enjeu { transition: none; }
+}
 
 /* ----------------------------------------------------------------------------
    14. IMPRESSION (secours ; l'export officiel = PDF, étape 5)
@@ -911,3 +1010,60 @@ input.is-invalid { border-color: var(--marge) !important; }
    affichée en permanence. Cette règle rétablit la priorité correcte.
    --------------------------------------------------------------------------- */
 .modale[hidden] { display: none; }
+
+/* ----------------------------------------------------------------------------
+   16. MICRO-INTERACTIONS (v1.2)
+   ---------------------------------------------------------------------------
+   Règle : chaque action produit un retour visuel, et AUCUN retour visuel ne
+   coûte un recalcul de mise en page (uniquement transform et opacity, donc
+   composés par le GPU). Tout est neutralisé sous prefers-reduced-motion.
+   --------------------------------------------------------------------------- */
+
+/* Boutons : le relief se lève au survol, s'enfonce au clic */
+.btn--primary:hover:not(:disabled) { transform: translateY(-1px); }
+.btn--primary:disabled { transform: none; }
+
+/* Onde au point de contact — position fournie par ui.js (--onde-x/--onde-y) */
+.btn { position: relative; overflow: hidden; }
+.btn.is-onde::after {
+  content: "";
+  position: absolute;
+  left: var(--onde-x, 50%);
+  top: var(--onde-y, 50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.28;
+  transform: translate(-50%, -50%) scale(0);
+  animation: onde 520ms ease-out forwards;
+  pointer-events: none;
+}
+@keyframes onde {
+  to { transform: translate(-50%, -50%) scale(28); opacity: 0; }
+}
+
+/* Puces (spécialités, options) : légère poussée à la sélection */
+.chip input:checked + span { animation: chip-pop 220ms ease-out; }
+@keyframes chip-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* Ligne de note : éclair discret quand la note vient d'être validée */
+.note-row.is-validee { animation: note-validee 620ms ease-out; }
+@keyframes note-validee {
+  0%   { background: var(--accent-soft); }
+  100% { background: transparent; }
+}
+
+/* Chiffres animés : chasse fixe pour que le défilé ne fasse pas trembler la mise en page */
+.num, .jauge__valeur { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn--primary:hover:not(:disabled) { transform: none; }
+  .btn.is-onde::after,
+  .chip input:checked + span,
+  .note-row.is-validee { animation: none; }
+}

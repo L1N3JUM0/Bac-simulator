@@ -163,7 +163,7 @@
 
       <div class="form__nav">
         <button type="button" class="btn btn--ghost" data-goto="profil">Retour</button>
-        <button type="button" class="btn btn--primary" data-goto="options">Continuer</button>
+        <button type="button" class="btn btn--primary" data-goto="options" data-etape="specialites">Continuer</button>
       </div>
     </section>
 
@@ -192,7 +192,7 @@
 
       <div class="form__nav">
         <button type="button" class="btn btn--ghost" data-goto="specialites">Retour</button>
-        <button type="button" class="btn btn--primary" data-goto="notes">Continuer</button>
+        <button type="button" class="btn btn--primary" data-goto="notes" data-etape="options">Continuer</button>
       </div>
     </section>
 
@@ -432,6 +432,25 @@
        BANDEAU DE SYNTHÈSE (sticky, mis à jour en direct par ui.js)
        ================================================================ -->
   <aside class="bandeau" id="bandeau" aria-live="polite" aria-label="Synthèse en direct" hidden>
+
+    <!-- Barre des points du bac déjà acquis (sur 2 000). Le repère à 50 %
+         matérialise les 1 000 points de l'admission. -->
+    <div class="jauge" id="jauge-bac">
+      <div class="jauge__entete">
+        <span class="jauge__label">Points du bac acquis</span>
+        <strong class="jauge__valeur num" id="jauge-texte">0 / 2 000</strong>
+      </div>
+      <div class="jauge__piste" role="progressbar" id="jauge-barre"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+           aria-label="Part des points du bac déjà acquis">
+        <div class="jauge__remplissage" id="jauge-remplissage"></div>
+        <div class="jauge__enjeu" id="jauge-enjeu"></div>
+        <span class="jauge__repere" aria-hidden="true"><i>1 000 · admis</i></span>
+      </div>
+      <p class="jauge__note" id="jauge-note">Seules les notes déjà obtenues comptent ici.</p>
+    </div>
+
+    <div class="bandeau__chiffres">
     <div class="bandeau__item">
       <span class="bandeau__label">Moyenne</span>
       <strong class="num" id="bandeau-moyenne">—</strong>
@@ -447,6 +466,7 @@
     <div class="bandeau__item bandeau__item--objectif">
       <span class="bandeau__label">Objectif</span>
       <strong id="bandeau-objectif">—</strong>
+    </div>
     </div>
   </aside>
 

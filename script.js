@@ -12,7 +12,7 @@
    ============================================================================ */
 
 import { BAC_DATA } from "./bacData.js";
-import { calculerTout, normaliserNote } from "./calculator.js";
+import { calculerTout, normaliserNote, validerEtape } from "./calculator.js";
 import { genererPDF } from "./pdf.js";
 import * as ui from "./ui.js";
 import * as storage from "./storage.js";
@@ -70,14 +70,56 @@ let derniersResultats = null;
 /** À chaque frappe : recalcule tout, met à jour résultats + bandeau, sauve. */
 function recalculer() {
   derniersResultats = calculerTout(state, BAC_DATA);
-  ui.afficherErreurs(derniersResultats.erreurs);
+  /* v1.2 — ui.afficherErreurs() n'est plus appelée ici : elle répartissait les
+     messages entre les deux zones en cherchant des mots dans le texte, et elle
+     entrait en conflit avec le gating. majEtapes() est désormais la SEULE à
+     écrire dans #err-specialites et #err-options. La fonction reste exportée
+     par ui.js pour ne rien casser ailleurs. */
   ui.renderResultats(state, derniersResultats, BAC_DATA);
   ui.renderBandeau(state, derniersResultats);
+  majEtapes();                     // v1.2 : (dé)verrouille les boutons « Continuer »
   // Les graphiques ne sont reconstruits que si l'écran est visible
   if (state.ui.ecranCourant === "dashboard") {
     ui.renderDashboard(state, derniersResultats, BAC_DATA);
   }
-  storage.save(state);
+  storage.saveDifferee(state);     // v1.2 : écritures regroupées (150 ms)
+}
+
+/* ----------------------------------------------------------------------------
+   2 bis. GATING DES ÉTAPES (v1.2)
+   ---------------------------------------------------------------------------
+   Un bouton « Continuer » qui mène à un écran incohérent est un piège. Chaque
+   bouton portant data-etape est désactivé tant que son étape n'est pas valide,
+   et la raison est affichée juste au-dessus — jamais un simple grisage muet.
+   --------------------------------------------------------------------------- */
+
+/** Où afficher le message de blocage de chaque étape. */
+const ZONES_ERREUR = {
+  specialites: "err-specialites",
+  options: "err-options",
+};
+
+function majEtapes() {
+  for (const bouton of document.querySelectorAll("[data-etape]")) {
+    const etape = bouton.dataset.etape;
+    const { valide, message } = validerEtape(etape, state, BAC_DATA);
+
+    bouton.disabled = !valide;
+    bouton.setAttribute("aria-disabled", String(!valide));
+
+    const zone = document.getElementById(ZONES_ERREUR[etape]);
+    if (!zone) continue;
+
+    /* Sur l'écran Options, on affiche TOUTES les erreurs réglementaires
+       (plafonds, conditions maths expertes/complémentaires…), pas seulement
+       la première : elles sont indépendantes les unes des autres. */
+    const texte = etape === "options" && derniersResultats
+      ? derniersResultats.erreurs.join(" ")
+      : (message || "");
+
+    zone.textContent = valide ? "" : texte;
+    zone.hidden = valide || texte === "";
+  }
 }
 
 /** Quand le PARCOURS change (spés, options, mode de saisie) :
@@ -99,23 +141,44 @@ const ORDRE_ECRANS = [
 const ECRANS_AVEC_BANDEAU = new Set(["notes", "resultats", "dashboard"]);
 
 function afficherEcran(nom) {
+  let sectionActive = null;
   document.querySelectorAll(".ecran").forEach((section) => {
-    section.hidden = section.id !== `ecran-${nom}`;
+    const active = section.id === `ecran-${nom}`;
+    section.hidden = !active;
+    if (active) sectionActive = section;
   });
 
   const stepper = document.getElementById("stepper");
   stepper.hidden = nom === "accueil";
   stepper.querySelectorAll(".stepper__item").forEach((item) => {
     const etape = item.dataset.step;
-    item.classList.toggle("is-active", etape === nom);
+    const active = etape === nom;
+    item.classList.toggle("is-active", active);
     item.classList.toggle(
       "is-done",
       ORDRE_ECRANS.indexOf(etape) < ORDRE_ECRANS.indexOf(nom)
     );
+    /* v1.2 — Un lecteur d'écran ne « voit » pas une classe CSS : c'est
+       aria-current qui lui annonce l'étape en cours. */
+    const bouton = item.querySelector("button");
+    if (bouton) {
+      if (active) bouton.setAttribute("aria-current", "step");
+      else bouton.removeAttribute("aria-current");
+    }
   });
 
   document.getElementById("bandeau").hidden = !ECRANS_AVEC_BANDEAU.has(nom);
   window.scrollTo({ top: 0, behavior: "instant" });
+
+  /* v1.2 — Le focus suit l'écran : sans cela, le changement de page était
+     totalement silencieux au clavier et au lecteur d'écran, et la tabulation
+     repartait du haut du document à chaque fois. */
+  if (sectionActive) {
+    const titre = sectionActive.querySelector("h1, h2");
+    const cible = titre || sectionActive;
+    if (!cible.hasAttribute("tabindex")) cible.setAttribute("tabindex", "-1");
+    cible.focus({ preventScroll: true });
+  }
 
   // Tableau de bord : (re)construit à chaque ouverture (suit aussi le thème)
   if (nom === "dashboard" && derniersResultats) {
@@ -202,6 +265,14 @@ document.getElementById("btn-prefill").addEventListener("click", () => {
   recalculer();
 });
 
+/* v1.2 — Si une sauvegarde illisible a été mise de côté, on le dit : l'élève
+   doit savoir que ses anciennes notes ne sont pas perdues (voir storage.js). */
+if (storage.aSauvegardeDeSecours()) {
+  console.info(
+    "Une ancienne sauvegarde illisible a été archivée sous « bac-simulator.secours »."
+  );
+}
+
 /* « Réinitialiser » : confirmation puis remise à zéro complète */
 document.getElementById("btn-reset").addEventListener("click", () => {
   const confirme = window.confirm(
@@ -226,6 +297,7 @@ switchTrimestres.addEventListener("change", () => {
    6. EXPORT PDF
    --------------------------------------------------------------------------- */
 document.getElementById("btn-pdf").addEventListener("click", () => {
+  storage.flush();                 // v1.2 : rien en attente avant un export
   if (!derniersResultats) recalculer();
   genererPDF(state, derniersResultats, BAC_DATA);
 });
@@ -319,6 +391,7 @@ appliquerTheme(state.ui.theme);
 ui.remplirAcademies(state, BAC_DATA);
 ui.bindProfil(state, recalculer);
 ui.initTabs();
+ui.initMicroInteractions();       // v1.2 : onde au clic (délégation globale)
 ui.initModaleGraphiques();
 ui.initCibles(state, BAC_DATA, recalculer);   // v1.1 : notes cibles (une fois)
 ui.renderSpecialites(state, BAC_DATA, reconstruireParcours);

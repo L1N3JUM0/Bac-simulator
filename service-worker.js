@@ -13,7 +13,7 @@
    L'enregistrement est déclenché depuis script.js (décommenté à l'étape 5).
    ============================================================================ */
 
-const NOM_CACHE = "bac-simulator-v4";
+const NOM_CACHE = "bac-simulator-v5";  // v1.2
 
 /** Fichiers pré-mis en cache. Complété aux étapes 4-5 (libs, icônes). */
 const FICHIERS = [

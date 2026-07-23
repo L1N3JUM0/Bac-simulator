@@ -121,13 +121,15 @@ export function buildGrille(state, data) {
   for (const ep of data.epreuvesTerminales) {
     // Résolution des labels dynamiques spe1/spe2
     let label = ep.label;
-    if (ep.id === "spe1") label = labelSpecialite(spesConservees[0], data);
-    if (ep.id === "spe2") label = labelSpecialite(spesConservees[1], data);
+    let speId = null;
+    if (ep.id === "spe1") { speId = spesConservees[0] || null; label = labelSpecialite(speId, data); }
+    if (ep.id === "spe2") { speId = spesConservees[1] || null; label = labelSpecialite(speId, data); }
 
     const note = normaliserNote(state.notes.epreuves[ep.id], false, regles);
     grille.push({
       id: ep.id,
       label,
+      speId,                 // v1.2 : identifiant de la spécialité (null hors spe1/spe2)
       coef: ep.coef,
       annee: ep.annee,
       categorie: "epreuve",
@@ -228,6 +230,59 @@ export function validerParcours(state, data) {
 }
 
 /* ----------------------------------------------------------------------------
+   3 bis. VALIDATION PAR ÉTAPE (v1.2 — assistant pas à pas)
+   ---------------------------------------------------------------------------
+   Chaque écran doit être valide avant de pouvoir passer au suivant. La règle
+   est ici, dans le moteur pur, pour rester testable ; ui.js ne fait qu'activer
+   ou désactiver le bouton « Continuer » et afficher le message.
+   --------------------------------------------------------------------------- */
+
+/**
+ * Une étape du parcours est-elle franchissable ?
+ * @param {string} etape - identifiant d'écran ("profil", "specialites", …)
+ * @returns {{valide: boolean, message: string|null}}
+ */
+export function validerEtape(etape, state, data) {
+  const ok = { valide: true, message: null };
+
+  if (etape === "specialites") {
+    const { choisies, abandonnee } = state.specialites;
+    if (choisies.length < 3) {
+      const manque = 3 - choisies.length;
+      return {
+        valide: false,
+        message: `Choisis encore ${manque} spécialité${manque > 1 ? "s" : ""} de Première.`,
+      };
+    }
+    if (choisies.length > 3) {
+      return { valide: false, message: "Tu ne peux garder que 3 spécialités de Première." };
+    }
+    if (!abandonnee) {
+      return {
+        valide: false,
+        message: "Indique la spécialité que tu abandonnes en fin de Première.",
+      };
+    }
+    if (!choisies.includes(abandonnee)) {
+      return {
+        valide: false,
+        message: "La spécialité abandonnée doit faire partie de tes 3 spécialités.",
+      };
+    }
+    return ok;
+  }
+
+  if (etape === "options") {
+    const erreurs = validerParcours(state, data);
+    return erreurs.length > 0 ? { valide: false, message: erreurs[0] } : ok;
+  }
+
+  /* Profil, notes, résultats… : rien de bloquant (l'objectif a une valeur par
+     défaut, et une simulation sans note reste une simulation légitime). */
+  return ok;
+}
+
+/* ----------------------------------------------------------------------------
    4. SYNTHÈSE : moyennes, points, coefficients, mentions
    --------------------------------------------------------------------------- */
 
@@ -269,11 +324,24 @@ export function calculerSynthese(grille, data) {
   const moyenneFinaleMin = pointsAcquis / coefTotal;
   const moyenneFinaleMax = (pointsAcquis + 20 * (coefTotal - coefAcquis)) / coefTotal;
 
+  /* v1.2 — Lecture « sur 2 000 points » : c'est le repère officiel le plus
+     parlant (il faut 1 000 points sur 2 000 pour être admis). Avec des options,
+     le total dépasse 2 000, d'où le calcul dynamique. */
+  const pointsMaxTotal = 20 * coefTotal;      // 2 000 sans option
+  const seuilAdmission = 10 * coefTotal;      // 1 000 sans option
+
   return {
     coefTotal,
     pointsAcquis, coefAcquis,
     pointsProjetes, coefProjetes,
     coefAVenir,
+    pointsMaxTotal,
+    seuilAdmission,
+    /* Part des points du bac DÉJÀ engrangée (0 → 1). Seuls les points acquis
+       comptent : une hypothèse de Terminale n'est pas un point sécurisé. */
+    partSecurisee: pointsMaxTotal > 0 ? pointsAcquis / pointsMaxTotal : 0,
+    /* Part des points encore en jeu, hypothèses comprises. */
+    partEnJeu: pointsMaxTotal > 0 ? (20 * (coefTotal - coefAcquis)) / pointsMaxTotal : 0,
     pointsRestantsMax: 20 * (coefTotal - coefAcquis),
     moyenneActuelle,
     moyenneProjetee,
@@ -550,8 +618,34 @@ export function calculerTout(state, data) {
    conservée. Il faut remonter la moyenne finale à 10/20.
    --------------------------------------------------------------------------- */
 
-/** Épreuves écrites éligibles aux oraux de rattrapage. */
-const EPREUVES_RATTRAPABLES = ["fr-ecrit", "philo", "spe1", "spe2"];
+/** Épreuves écrites éligibles aux oraux de rattrapage.
+    v1.2 : ajout de la maths anticipée. Les oraux du 2d groupe portent sur les
+    disciplines ayant fait l'objet d'une épreuve ÉCRITE du 1er groupe,
+    « y compris les épreuves anticipées » — ce qui inclut, depuis la session
+    2027, l'épreuve anticipée de mathématiques (arrêté du 10 juin 2025).
+    Le français ORAL n'y figure pas : ce n'était pas une épreuve écrite. */
+const EPREUVES_RATTRAPABLES = ["fr-ecrit", "maths-ant", "philo", "spe1", "spe2"];
+
+/**
+ * Une paire de matières d'oral est-elle réglementaire ?
+ * Règle (arrêté du 10 juin 2025) : un candidat ne peut pas choisir à la fois
+ * l'épreuve anticipée de mathématiques ET la spécialité mathématiques.
+ * @param {Array} paire - deux éléments issus de simulerRattrapage().matieres
+ * @returns {{valide: boolean, message: string|null}}
+ */
+export function paireRattrapageValide(paire) {
+  if (!paire || paire.length !== 2) return { valide: false, message: null };
+  const aMathsAnticipee = paire.some((m) => m.id === "maths-ant");
+  const aSpeMaths = paire.some((m) => m.speId === "maths");
+  if (aMathsAnticipee && aSpeMaths) {
+    return {
+      valide: false,
+      message: "La maths anticipée et la spécialité mathématiques ne peuvent pas "
+             + "être choisies ensemble pour les deux oraux.",
+    };
+  }
+  return { valide: true, message: null };
+}
 
 /**
  * Prépare la simulation du rattrapage.
@@ -581,6 +675,7 @@ export function simulerRattrapage(grille, data) {
       return {
         id: l.id,
         label: l.label,
+        speId: l.speId ?? null,   // v1.2 : sert à la règle maths anticipée / spé maths
         coef: l.coef,
         note,
         oralSeul,

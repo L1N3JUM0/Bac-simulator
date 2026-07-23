@@ -18,6 +18,7 @@ import {
   buildGrille, validerParcours, calculerSynthese, mentionPour,
   notesMinimales, genererScenarios, indiceFaisabilite, calculerTout,
   simulerRattrapage, oralsRattrapage,
+  paireRattrapageValide, validerEtape,
 } from "./calculator.js";
 
 /* ----------------------------------------------------------------------------
@@ -252,7 +253,9 @@ test("Rattrapage : élève à 9/20 → concerné, 100 points manquants", () => {
   const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
   egal(r.concerne, true);
   egal(r.pointsManquants, 100, 0.001);
-  egal(r.matieres.length, 4); // français écrit, philo, spé 1, spé 2
+  // v1.2 : 5 matières depuis la session 2027 — français écrit, MATHS ANTICIPÉE,
+  // philo, spé 1, spé 2 (le français ORAL n'est pas une épreuve écrite).
+  egal(r.matieres.length, 5);
 });
 
 test("Rattrapage : une spé seule (coef 16) exige 9 + 100/16 = 15,25 à l'oral", () => {
@@ -292,6 +295,104 @@ test("Rattrapage : saturation à 20 → l'effort bascule sur l'autre matière", 
 test("Rattrapage : élève à 13 → non concerné", () => {
   const r = simulerRattrapage(buildGrille(etatReference(), BAC_DATA), BAC_DATA);
   egal(r.concerne, false);
+});
+
+/* --- 9. Conformité 2027 : rattrapage de la maths anticipée (v1.2) -------- */
+
+test("Rattrapage : la maths anticipée est une matière rattrapable", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const maths = r.matieres.find((m) => m.id === "maths-ant");
+  egal(Boolean(maths), true);
+  egal(maths.coef, 2);
+});
+
+test("Rattrapage : le français oral n'est PAS rattrapable (pas une épreuve écrite)", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  egal(r.matieres.some((m) => m.id === "fr-oral"), false);
+});
+
+test("Rattrapage : maths anticipée + spé maths ensemble → paire interdite", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const maths = r.matieres.find((m) => m.id === "maths-ant");
+  const speMaths = r.matieres.find((m) => m.speId === "maths");
+  egal(Boolean(speMaths), true); // l'élève de référence conserve la spé maths
+  egal(paireRattrapageValide([maths, speMaths]).valide, false);
+});
+
+test("Rattrapage : maths anticipée + philo → paire autorisée", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const maths = r.matieres.find((m) => m.id === "maths-ant");
+  const philo = r.matieres.find((m) => m.id === "philo");
+  egal(paireRattrapageValide([maths, philo]).valide, true);
+});
+
+test("Rattrapage : la maths anticipée seule (coef 2) est infaisable", () => {
+  const r = simulerRattrapage(buildGrille(etatNeuf(), BAC_DATA), BAC_DATA);
+  const maths = r.matieres.find((m) => m.id === "maths-ant");
+  egal(maths.oralSeulFaisable, false); // 9 + 100/2 = 59/20 : impossible
+});
+
+/* --- 10. Points sur 2 000 et part sécurisée (v1.2) ----------------------- */
+
+test("Points sur 2 000 : élève de référence à 434 points acquis sur 2 000", () => {
+  const s = calculerSynthese(buildGrille(etatReference(), BAC_DATA), BAC_DATA);
+  egal(s.pointsMaxTotal, 2000);
+  egal(s.seuilAdmission, 1000);
+  egal(s.pointsAcquis, 434, 0.001);
+  egal(s.partSecurisee, 434 / 2000, 0.0001);
+});
+
+test("Points sur 2 000 : une option porte le total à 2 080 points", () => {
+  const etat = etatReference();
+  etat.options = { premiere: ["latin"], terminale: ["latin"] };
+  const s = calculerSynthese(buildGrille(etat, BAC_DATA), BAC_DATA);
+  egal(s.coefTotal, 104);
+  egal(s.pointsMaxTotal, 2080);
+  egal(s.seuilAdmission, 1040);
+});
+
+test("Élève parfait : part sécurisée = 100 %", () => {
+  const etat = etatReference();
+  for (const cle of Object.keys(etat.notes.epreuves))    etat.notes.epreuves[cle] = 20;
+  for (const cle of Object.keys(etat.notes.ccPremiere))  etat.notes.ccPremiere[cle] = 20;
+  for (const cle of Object.keys(etat.notes.ccTerminale)) etat.notes.ccTerminale[cle] = 20;
+  const s = calculerSynthese(buildGrille(etat, BAC_DATA), BAC_DATA);
+  // Les hypothèses de Terminale ne sont PAS sécurisées : seuls 1re + anticipées le sont
+  egal(s.partSecurisee < 1, true);
+  egal(s.partSecurisee, (20 * s.coefAcquis) / 2000, 0.0001);
+});
+
+/* --- 11. Gating des étapes (v1.2) --------------------------------------- */
+
+test("Étape spécialités : 2 spés choisies → bloquée", () => {
+  const etat = etatReference();
+  etat.specialites = { choisies: ["maths", "svt"], abandonnee: null };
+  const v = validerEtape("specialites", etat, BAC_DATA);
+  egal(v.valide, false);
+  egal(v.message.includes("1 spécialité"), true);
+});
+
+test("Étape spécialités : 3 spés mais aucun abandon → bloquée", () => {
+  const etat = etatReference();
+  etat.specialites = { choisies: ["maths", "physique-chimie", "svt"], abandonnee: null };
+  egal(validerEtape("specialites", etat, BAC_DATA).valide, false);
+});
+
+test("Étape spécialités : parcours complet → franchissable", () => {
+  egal(validerEtape("specialites", etatReference(), BAC_DATA).valide, true);
+});
+
+test("Étape options : maths complémentaires avec spé maths conservée → bloquée", () => {
+  const etat = etatReference();
+  etat.options = { premiere: [], terminale: ["maths-complementaires"] };
+  const v = validerEtape("options", etat, BAC_DATA);
+  egal(v.valide, false);
+  egal(typeof v.message, "string");
+});
+
+test("Étapes profil et notes : jamais bloquantes", () => {
+  egal(validerEtape("profil", etatReference(), BAC_DATA).valide, true);
+  egal(validerEtape("notes", etatReference(), BAC_DATA).valide, true);
 });
 
 /* ============================================================================

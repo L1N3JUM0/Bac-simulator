@@ -12,6 +12,40 @@
     (state.schemaVersion), pas cette clé, en cas d'évolution. */
 const CLE = "bac-simulator.v1";
 
+/** v1.2 — Clé d'archivage. Un état que ce code ne sait PAS relire (schéma plus
+    récent, JSON corrompu) n'est plus jeté : il est recopié ici avant que
+    l'application n'en écrive un neuf par-dessus. Sans cela, ouvrir l'app avec
+    un service worker en retard d'une version effaçait définitivement la
+    simulation de l'élève. */
+const CLE_SECOURS = "bac-simulator.secours";
+
+/**
+ * Met de côté une sauvegarde illisible, une seule fois (on n'écrase jamais une
+ * archive existante par une plus récente : la première est la plus précieuse).
+ */
+function archiverSecours(brut, raison) {
+  try {
+    if (localStorage.getItem(CLE_SECOURS)) return;
+    localStorage.setItem(CLE_SECOURS, JSON.stringify({
+      archiveLe: new Date().toISOString(),
+      raison,
+      contenu: brut,
+    }));
+    console.warn(`Sauvegarde illisible (${raison}) archivée sous « ${CLE_SECOURS} ».`);
+  } catch {
+    /* localStorage plein ou bloqué : on ne peut rien faire de plus. */
+  }
+}
+
+/** Une sauvegarde de secours existe-t-elle ? (l'interface peut le signaler) */
+export function aSauvegardeDeSecours() {
+  try {
+    return localStorage.getItem(CLE_SECOURS) !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Version courante du schéma d'état (voir CONCEPTION.md § 3.2).
     v2 (v1.1) : ajout de `cibles` (notes cibles par épreuve), `rattrapage`
     (matières choisies pour le 2d groupe) et `historique` (suivi de la
@@ -60,18 +94,25 @@ export function load() {
 
     // Garde-fou : structure minimale attendue
     if (!state || typeof state !== "object" || !state.notes || !state.specialites) {
+      archiverSecours(brut, "structure inattendue");
       return null;
     }
 
     migrer(state);
     if (state.schemaVersion !== SCHEMA_VERSION) {
+      archiverSecours(brut, `schéma ${state.schemaVersion} ≠ ${SCHEMA_VERSION}`);
       console.warn(`Schéma ${state.schemaVersion} ≠ ${SCHEMA_VERSION} : état ignoré.`);
       return null;
     }
 
     return state;
   } catch {
-    return null; // JSON corrompu → on repart de zéro sans planter
+    // JSON corrompu → on repart de zéro sans planter, mais sans rien perdre
+    try {
+      const brut = localStorage.getItem(CLE);
+      if (brut) archiverSecours(brut, "JSON illisible");
+    } catch { /* ignoré */ }
+    return null;
   }
 }
 
@@ -79,9 +120,56 @@ export function load() {
 export function reset() {
   try {
     localStorage.removeItem(CLE);
+    localStorage.removeItem(CLE_SECOURS); // une remise à zéro efface TOUT
   } catch {
     /* rien à faire : au pire la clé restera */
   }
+}
+
+/* ----------------------------------------------------------------------------
+   SAUVEGARDE DIFFÉRÉE (v1.2 — correctif de performance)
+   ---------------------------------------------------------------------------
+   Écrire dans le localStorage est SYNCHRONE : à chaque caractère tapé, l'ancien
+   code sérialisait tout l'état et bloquait le fil principal. On regroupe donc
+   les écritures dans une fenêtre de 150 ms, avec vidage immédiat dès que la
+   page passe en arrière-plan ou se ferme — aucune saisie ne peut être perdue.
+   --------------------------------------------------------------------------- */
+
+const DELAI_SAUVEGARDE = 150; // ms
+let minuterie = null;
+let enAttente = null;
+
+/** Programme une sauvegarde ; les appels rapprochés sont fusionnés. */
+export function saveDifferee(state) {
+  enAttente = state;
+  if (minuterie !== null) return;
+  minuterie = setTimeout(() => {
+    minuterie = null;
+    const aSauver = enAttente;
+    enAttente = null;
+    if (aSauver) save(aSauver);
+  }, DELAI_SAUVEGARDE);
+}
+
+/** Écrit immédiatement une éventuelle sauvegarde en attente. */
+export function flush() {
+  if (minuterie !== null) {
+    clearTimeout(minuterie);
+    minuterie = null;
+  }
+  if (enAttente) {
+    const aSauver = enAttente;
+    enAttente = null;
+    save(aSauver);
+  }
+}
+
+/** Vidage automatique quand la page se cache ou se ferme (mobile compris). */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
+  window.addEventListener("pagehide", flush);
 }
 
 /** Une simulation sauvegardée existe-t-elle ? (bouton « Reprendre ») */

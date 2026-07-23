@@ -12,7 +12,8 @@
 
 import {
   parseNote, normaliserNote, notesMinimales,
-  calculerTout, simulerRattrapage, oralsRattrapage,
+  buildGrille, calculerSynthese, simulerRattrapage, oralsRattrapage,
+  paireRattrapageValide,
 } from "./calculator.js";
 
 /* ----------------------------------------------------------------------------
@@ -41,6 +42,105 @@ function libelleObjectif(objectif) {
 /** Les deux spécialités conservées, dans l'ordre de sélection. */
 function spesConservees(state) {
   return state.specialites.choisies.filter((id) => id !== state.specialites.abandonnee);
+}
+
+/* ----------------------------------------------------------------------------
+   1 bis. ANIMATION DES NOMBRES (v1.2)
+   ---------------------------------------------------------------------------
+   Un chiffre qui se met à jour d'un coup n'est pas lu ; un chiffre qui défile
+   attire l'œil sur ce qui vient de changer. L'animation est COURTE (420 ms),
+   annulable, et totalement désactivée si l'utilisateur a demandé moins de
+   mouvement. La valeur finale est écrite dans tous les cas : aucune animation
+   ne peut laisser un affichage faux.
+   --------------------------------------------------------------------------- */
+
+/** L'utilisateur a-t-il demandé à réduire les animations ? */
+function mouvementReduit() {
+  return typeof window !== "undefined" && window.matchMedia
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+}
+
+/** Animations en cours, indexées par élément (pour pouvoir les interrompre). */
+const animations = new WeakMap();
+
+/**
+ * Fait défiler un nombre de sa valeur actuelle vers `cible`.
+ * @param {HTMLElement} element
+ * @param {number|null} cible
+ * @param {function} formater - (valeur) => texte affiché
+ */
+function animerNombre(element, cible, formater) {
+  if (!element) return;
+
+  const precedent = animations.get(element);
+  if (precedent) cancelAnimationFrame(precedent.frame);
+
+  const depart = precedent ? precedent.valeur : Number(element.dataset.valeur ?? cible ?? 0);
+
+  if (cible === null || cible === undefined || Number.isNaN(cible)) {
+    animations.delete(element);
+    delete element.dataset.valeur;
+    element.textContent = formater(null);
+    return;
+  }
+
+  // Pas d'animation si mouvement réduit, ou si l'écart est insignifiant
+  if (mouvementReduit() || Math.abs(cible - depart) < 0.01) {
+    animations.delete(element);
+    element.dataset.valeur = String(cible);
+    element.textContent = formater(cible);
+    return;
+  }
+
+  const DUREE = 420;
+  const debut = performance.now();
+  const etat = { valeur: depart, frame: 0 };
+  animations.set(element, etat);
+
+  const pas = (maintenant) => {
+    const avancement = Math.min(1, (maintenant - debut) / DUREE);
+    // Sortie douce : rapide au début, se pose à la fin
+    const adouci = 1 - Math.pow(1 - avancement, 3);
+    etat.valeur = depart + (cible - depart) * adouci;
+    element.textContent = formater(etat.valeur);
+
+    if (avancement < 1) {
+      etat.frame = requestAnimationFrame(pas);
+    } else {
+      animations.delete(element);
+      element.dataset.valeur = String(cible);
+      element.textContent = formater(cible); // valeur exacte, sans arrondi d'animation
+    }
+  };
+  etat.frame = requestAnimationFrame(pas);
+}
+
+/**
+ * Onde au point de contact sur tous les boutons (délégation : un seul écouteur
+ * pour toute l'application, y compris les boutons créés plus tard).
+ */
+export function initMicroInteractions() {
+  if (typeof document === "undefined") return;
+  document.addEventListener("pointerdown", (evenement) => {
+    if (mouvementReduit()) return;
+    const bouton = evenement.target.closest(".btn");
+    if (!bouton || bouton.disabled) return;
+
+    const cadre = bouton.getBoundingClientRect();
+    bouton.style.setProperty("--onde-x", `${evenement.clientX - cadre.left}px`);
+    bouton.style.setProperty("--onde-y", `${evenement.clientY - cadre.top}px`);
+    bouton.classList.remove("is-onde");
+    void bouton.offsetWidth;              // force le redémarrage de l'animation
+    bouton.classList.add("is-onde");
+    setTimeout(() => bouton.classList.remove("is-onde"), 560);
+  });
+}
+
+/** Entier avec espace fine insécable comme séparateur de milliers. */
+function entier(valeur) {
+  if (valeur === null || Number.isNaN(valeur)) return "—";
+  return Math.round(valeur).toLocaleString("fr-FR").replace(/\u202F|\u00A0/g, "\u202F");
 }
 
 /* ----------------------------------------------------------------------------
@@ -194,8 +294,18 @@ function ligneNote(p, regles) {
 
   /** Met à jour la marge (statut visuel) selon la présence d'une note. */
   const majStatut = (rempli) => {
+    const avant = ligne.className;
     ligne.classList.remove("note-row--acquis", "note-row--projete", "note-row--avenir");
     ligne.classList.add(`note-row--${rempli ? p.statutRempli || p.statut : "avenir"}`);
+
+    /* v1.2 — Retour visuel : la ligne s'éclaire brièvement au moment où la
+       note devient valide (et seulement à ce moment-là, pas à chaque frappe). */
+    if (rempli && avant !== ligne.className && !mouvementReduit()) {
+      ligne.classList.remove("is-validee");
+      void ligne.offsetWidth;
+      ligne.classList.add("is-validee");
+      setTimeout(() => ligne.classList.remove("is-validee"), 660);
+    }
   };
 
   if (p.mode === "trimestres") {
@@ -495,11 +605,61 @@ export function renderResultats(state, resultats, data) {
 /** Met à jour le bandeau sticky de synthèse. */
 export function renderBandeau(state, resultats) {
   const { synthese } = resultats;
-  $("#bandeau-moyenne").textContent = fmt(synthese.moyenneProjetee, 2);
-  $("#bandeau-acquis").textContent = `${fmt(synthese.pointsAcquis, 0)} pts`;
+
+  /* Chiffres animés */
+  animerNombre($("#bandeau-moyenne"), synthese.moyenneProjetee, (v) => fmt(v, 2));
+  animerNombre($("#bandeau-acquis"), synthese.pointsAcquis, (v) =>
+    v === null ? "—" : `${entier(v)} pts`);
+
   $("#bandeau-mention").textContent = synthese.mentionActuelle
     ? synthese.mentionActuelle.court : "—";
   $("#bandeau-objectif").textContent = libelleObjectif(Number(state.profil.objectif));
+
+  renderJauge(synthese);
+}
+
+/**
+ * Barre « points du bac déjà acquis », lue sur 2 000 points.
+ * Trois zones : acquis (plein), encore en jeu (hachuré), perdu/non atteignable
+ * (vide). Le repère à 50 % matérialise les 1 000 points de l'admission.
+ */
+function renderJauge(synthese) {
+  const piste = $("#jauge-barre");
+  if (!piste) return;
+
+  const partAcquise = Math.max(0, Math.min(1, synthese.partSecurisee || 0));
+  const partEnJeu = Math.max(0, Math.min(1 - partAcquise, synthese.partEnJeu || 0));
+  const pourcentage = Math.round(partAcquise * 100);
+
+  $("#jauge-remplissage").style.width = `${partAcquise * 100}%`;
+  $("#jauge-enjeu").style.left = `${partAcquise * 100}%`;
+  $("#jauge-enjeu").style.width = `${partEnJeu * 100}%`;
+
+  piste.setAttribute("aria-valuenow", String(pourcentage));
+  piste.setAttribute(
+    "aria-valuetext",
+    `${entier(synthese.pointsAcquis)} points acquis sur ${entier(synthese.pointsMaxTotal)}, soit ${pourcentage} %`
+  );
+
+  animerNombre($("#jauge-texte"), synthese.pointsAcquis, (v) =>
+    `${entier(v)} / ${entier(synthese.pointsMaxTotal)}`);
+
+  /* Message honnête : on rappelle que seules les notes obtenues comptent,
+     et on situe l'élève par rapport aux 1 000 points de l'admission. */
+  const note = $("#jauge-note");
+  if (note) {
+    const manque = synthese.seuilAdmission - synthese.pointsAcquis;
+    if (synthese.pointsAcquis <= 0) {
+      note.textContent = "Saisis tes épreuves anticipées et tes bulletins de Première pour voir tes premiers points.";
+    } else if (manque > 0) {
+      note.textContent = `Il te manque ${entier(manque)} points pour atteindre les `
+        + `${entier(synthese.seuilAdmission)} points de l'admission — il en reste `
+        + `${entier(synthese.pointsRestantsMax)} en jeu.`;
+    } else {
+      note.textContent = `Les ${entier(synthese.seuilAdmission)} points de l'admission sont déjà acquis, `
+        + `quoi qu'il arrive en Terminale.`;
+    }
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -949,11 +1109,18 @@ function renderComparateur(state, resultats, data) {
 
   /* Clone : les cibles remplacent les hypothèses d'épreuves (champ vide =
      l'hypothèse actuelle est conservée). */
-  const clone = JSON.parse(JSON.stringify(state));
+  /* v1.2 — On ne clone plus l'état entier et on ne relance plus calculerTout()
+     (qui recalculait scénarios et conseils pour rien) : seules les notes
+     d'épreuves changent, et seule la synthèse est affichée. Coût divisé par
+     ~10 à chaque frappe. */
+  const clone = {
+    ...state,
+    notes: { ...state.notes, epreuves: { ...state.notes.epreuves } },
+  };
   for (const id of IDS_CIBLES) {
     if (state.cibles[id] !== undefined) clone.notes.epreuves[id] = state.cibles[id];
   }
-  const b = calculerTout(clone, data).synthese;
+  const b = calculerSynthese(buildGrille(clone, data), data);
 
   $("#comp-a-moyenne").textContent = fmt(a.moyenneProjetee, 2);
   $("#comp-a-mention").textContent = a.mentionActuelle ? a.mentionActuelle.label : "—";
@@ -988,6 +1155,13 @@ function renderRattrapage(state, resultats, data) {
 
   /* Chips de sélection (2 max), persistées dans state.rattrapage */
   const conteneur = $("#rattrapage-matieres");
+
+  /* v1.2 — On mémorise la case qui avait le focus AVANT de reconstruire la
+     liste : sans cela, le focus retombait sur <body> à chaque coche et il
+     devenait impossible de sélectionner deux matières au clavier. */
+  const focusAvant = document.activeElement;
+  const idFocus = focusAvant && conteneur.contains(focusAvant) ? focusAvant.value : null;
+
   conteneur.innerHTML = "";
   state.rattrapage = (state.rattrapage || []).filter((id) =>
     rattrapage.matieres.some((m) => m.id === id));
@@ -995,10 +1169,27 @@ function renderRattrapage(state, resultats, data) {
 
   for (const matiere of rattrapage.matieres) {
     const choisie = state.rattrapage.includes(matiere.id);
+
+    /* Règle 2027 : maths anticipée et spécialité mathématiques ne peuvent pas
+       être les deux oraux. On désactive la seconde dès que la première est
+       cochée, plutôt que de laisser faire puis afficher une erreur. */
+    let incompatible = false;
+    if (!choisie && state.rattrapage.length === 1) {
+      const dejaChoisie = rattrapage.matieres.find((m) => m.id === state.rattrapage[0]);
+      incompatible = dejaChoisie
+        ? !paireRattrapageValide([dejaChoisie, matiere]).valide
+        : false;
+    }
+    const bloquee = !choisie && (pleines || incompatible);
+
     const label = document.createElement("label");
-    label.className = "chip" + (!choisie && pleines ? " chip--disabled" : "");
+    label.className = "chip" + (bloquee ? " chip--disabled" : "");
+    if (incompatible) {
+      label.title = "Incompatible avec la matière déjà sélectionnée "
+                  + "(maths anticipée et spécialité mathématiques s'excluent).";
+    }
     label.innerHTML = `<input type="checkbox" value="${matiere.id}"
-      ${choisie ? "checked" : ""} ${!choisie && pleines ? "disabled" : ""}>
+      ${choisie ? "checked" : ""} ${bloquee ? "disabled" : ""}>
       <span>${matiere.label} <small>coef ${matiere.coef} · écrit ${fmt(matiere.note)}</small></span>`;
     label.querySelector("input").addEventListener("change", (e) => {
       if (e.target.checked) state.rattrapage.push(matiere.id);
@@ -1006,6 +1197,17 @@ function renderRattrapage(state, resultats, data) {
       renderRattrapage(state, resultats, data); // re-render local
     });
     conteneur.appendChild(label);
+  }
+
+  /* Restitution du focus sur la même case (ou, si elle est devenue
+     désactivée, sur la première case encore actionnable). */
+  if (idFocus) {
+    const memeCase = conteneur.querySelector(`input[value="${idFocus}"]`);
+    if (memeCase && !memeCase.disabled) memeCase.focus();
+    else {
+      const secours = conteneur.querySelector("input:not(:disabled)");
+      if (secours) secours.focus();
+    }
   }
 
   /* Verdict */
@@ -1018,6 +1220,16 @@ function renderRattrapage(state, resultats, data) {
   }
 
   const paire = state.rattrapage.map((id) => rattrapage.matieres.find((m) => m.id === id));
+
+  /* Garde-fou : une sauvegarde antérieure peut contenir une paire devenue
+     interdite. On le dit clairement plutôt que d'afficher un calcul faux. */
+  const legalite = paireRattrapageValide(paire);
+  if (!legalite.valide && legalite.message) {
+    zone.innerHTML = `<div class="rattrapage__verdict rattrapage__verdict--ko">
+      ✗ ${legalite.message}</div>`;
+    return;
+  }
+
   const verdict = oralsRattrapage(paire, rattrapage.pointsManquants);
   if (verdict.faisable) {
     zone.innerHTML = `<div class="rattrapage__verdict rattrapage__verdict--ok">
