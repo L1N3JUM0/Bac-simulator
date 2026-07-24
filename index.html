@@ -44,6 +44,7 @@
         <li class="stepper__item" data-step="options"><button type="button" data-goto="options">Options</button></li>
         <li class="stepper__item" data-step="notes"><button type="button" data-goto="notes">Notes</button></li>
         <li class="stepper__item" data-step="resultats"><button type="button" data-goto="resultats">Résultats</button></li>
+        <li class="stepper__item" data-step="strategie"><button type="button" data-goto="strategie">Stratégie</button></li>
         <li class="stepper__item" data-step="dashboard"><button type="button" data-goto="dashboard">Graphiques</button></li>
       </ol>
     </nav>
@@ -321,13 +322,58 @@
 
       <div class="form__nav">
         <button type="button" class="btn btn--ghost" data-goto="notes">Retour</button>
-        <button type="button" class="btn btn--primary" data-goto="dashboard">Tableau de bord</button>
+        <button type="button" class="btn btn--primary" data-goto="strategie">Voir ma stratégie</button>
       </div>
     </section>
 
     <!-- ============================================================
          ÉCRAN 7 — TABLEAU DE BORD (Chart.js à l'étape 4)
          ============================================================ -->
+    <!-- ============================================================
+         ÉCRAN 7 — STRATÉGIE (v1.3, contenu généré par ui.js)
+         ============================================================ -->
+    <section class="ecran" id="ecran-strategie" aria-labelledby="titre-strategie" hidden>
+      <h2 id="titre-strategie" class="ecran__title">Ta stratégie</h2>
+      <p class="ecran__sub">Le chemin le plus facile vers ton objectif, calculé
+        à partir de ton niveau et de tes points forts — pas une répartition
+        uniforme.</p>
+
+      <!-- Choix de l'objectif à optimiser -->
+      <section class="card" aria-labelledby="titre-strat-objectif">
+        <p class="eyebrow" id="titre-strat-objectif">Objectif à atteindre</p>
+        <div class="chips" role="radiogroup" aria-label="Objectif de la stratégie"
+             id="strategie-objectifs"></div>
+        <p class="strat__requis" id="strategie-requis"></p>
+      </section>
+
+      <!-- Curseur de confiance : c'est lui qui personnalise tout le reste -->
+      <section class="card" aria-labelledby="titre-confiance">
+        <p class="eyebrow" id="titre-confiance">Ton niveau, matière par matière</p>
+        <p class="ecran__sub">Gagner un point coûte plus cher dans une matière
+          fragile. Dis-le au simulateur : il en tiendra compte pour répartir
+          l'effort.</p>
+        <div id="liste-confiance"></div>
+      </section>
+
+      <!-- Les trois chemins, classés du plus facile au plus dur -->
+      <section class="card" aria-labelledby="titre-chemins">
+        <p class="eyebrow" id="titre-chemins">Trois chemins possibles</p>
+        <div id="liste-strategies" aria-live="polite"></div>
+      </section>
+
+      <!-- Classement de rentabilité -->
+      <section class="card" aria-labelledby="titre-rentabilite">
+        <p class="eyebrow" id="titre-rentabilite">Où un point rapporte-t-il le plus ?</p>
+        <ol class="rentab" id="liste-rentabilite"></ol>
+        <p class="ecran__sub" id="rentab-note"></p>
+      </section>
+
+      <div class="form__nav">
+        <button type="button" class="btn btn--ghost" data-goto="resultats">Retour</button>
+        <button type="button" class="btn btn--primary" data-goto="dashboard">Graphiques</button>
+      </div>
+    </section>
+
     <section class="ecran" id="ecran-dashboard" aria-labelledby="titre-dash" hidden>
       <h2 id="titre-dash" class="ecran__title">Tableau de bord</h2>
       <p class="ecran__sub">Quatre lectures visuelles de ta simulation, mises à jour en direct.

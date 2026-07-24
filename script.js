@@ -35,6 +35,7 @@ function etatInitial() {
     saisieCC: "moyenne",                        // "moyenne" | "trimestres"
     notes: { epreuves, ccPremiere: {}, ccTerminale: {} },
     cibles: {},                                 // v1.1 : notes cibles par épreuve
+    confiance: {},                              // v1.3 : ligne → fort|neutre|fragile
     rattrapage: [],                             // v1.1 : matières du 2d groupe
     historique: [],                             // v1.1 : [{date, moyenne}]
     ui: { theme: "auto", ecranCourant: "accueil" },
@@ -78,6 +79,12 @@ function recalculer() {
   ui.renderResultats(state, derniersResultats, BAC_DATA);
   ui.renderBandeau(state, derniersResultats);
   majEtapes();                     // v1.2 : (dé)verrouille les boutons « Continuer »
+  /* v1.3 — La stratégie n'est calculée que si son écran est affiché :
+     l'optimiseur est rapide, mais inutile de le lancer à chaque frappe
+     quand l'élève est sur l'écran Notes. */
+  if (state.ui.ecranCourant === "strategie") {
+    ui.renderStrategie(state, derniersResultats, BAC_DATA, recalculer);
+  }
   // Les graphiques ne sont reconstruits que si l'écran est visible
   if (state.ui.ecranCourant === "dashboard") {
     ui.renderDashboard(state, derniersResultats, BAC_DATA);
@@ -136,9 +143,9 @@ function reconstruireParcours() {
    --------------------------------------------------------------------------- */
 const ORDRE_ECRANS = [
   "accueil", "profil", "specialites", "options",
-  "notes", "resultats", "dashboard", "export",
+  "notes", "resultats", "strategie", "dashboard", "export",
 ];
-const ECRANS_AVEC_BANDEAU = new Set(["notes", "resultats", "dashboard"]);
+const ECRANS_AVEC_BANDEAU = new Set(["notes", "resultats", "strategie", "dashboard"]);
 
 function afficherEcran(nom) {
   let sectionActive = null;
@@ -183,6 +190,12 @@ function afficherEcran(nom) {
   // Tableau de bord : (re)construit à chaque ouverture (suit aussi le thème)
   if (nom === "dashboard" && derniersResultats) {
     ui.renderDashboard(state, derniersResultats, BAC_DATA);
+  }
+
+  // v1.3 — Stratégie : recalculée à chaque ouverture (l'objectif ou la
+  // confiance ont pu changer entre-temps)
+  if (nom === "strategie" && derniersResultats) {
+    ui.renderStrategie(state, derniersResultats, BAC_DATA, recalculer);
   }
 
   // Mémorise l'écran courant pour le bouton « Reprendre »

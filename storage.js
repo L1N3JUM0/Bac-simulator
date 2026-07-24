@@ -50,15 +50,21 @@ export function aSauvegardeDeSecours() {
     v2 (v1.1) : ajout de `cibles` (notes cibles par épreuve), `rattrapage`
     (matières choisies pour le 2d groupe) et `historique` (suivi de la
     moyenne dans le temps). */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
-/** Migration douce d'un état v1 vers v2 : on complète, on ne jette rien. */
+/** Migrations douces, appliquées en cascade : on complète, on ne jette jamais. */
 function migrer(state) {
   if (state.schemaVersion === 1) {
     state.cibles = {};
     state.rattrapage = [];
     state.historique = [];
     state.schemaVersion = 2;
+  }
+  if (state.schemaVersion === 2) {
+    /* v1.3 — Curseur de confiance par matière (optimizer.js). Vide par
+       défaut : toutes les matières démarrent en « neutre ». */
+    state.confiance = {};
+    state.schemaVersion = 3;
   }
   return state;
 }
@@ -221,6 +227,10 @@ export function depuisLien() {
     const octets = Uint8Array.from(binaire, (c) => c.charCodeAt(0));
     const state = JSON.parse(new TextDecoder().decode(octets));
     if (!state || !state.notes || !state.specialites) return null;
+    migrer(state);
+    /* v1.3 — Un lien partagé avec une version antérieure est MIGRÉ, pas
+       rejeté : sinon toute évolution de schéma cassait les liens déjà
+       envoyés par les élèves. */
     migrer(state);
     return state.schemaVersion === SCHEMA_VERSION ? state : null;
   } catch {

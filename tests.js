@@ -20,6 +20,11 @@ import {
   simulerRattrapage, oralsRattrapage,
   paireRattrapageValide, validerEtape,
 } from "./calculator.js";
+import {
+  construireLeviers, optimiser, genererStrategies, classementRentabilite,
+  margeSecurite, pointsRequis, analyserObjectif, qualifierEffort,
+  POIDS_CONFIANCE,
+} from "./optimizer.js";
 
 /* ----------------------------------------------------------------------------
    Mini-framework d'assertions
@@ -393,6 +398,254 @@ test("Étape options : maths complémentaires avec spé maths conservée → blo
 test("Étapes profil et notes : jamais bloquantes", () => {
   egal(validerEtape("profil", etatReference(), BAC_DATA).valide, true);
   egal(validerEtape("notes", etatReference(), BAC_DATA).valide, true);
+});
+
+/* ============================================================================
+   12. MOTEUR DE STRATÉGIE (optimizer.js) — v1.3
+   ============================================================================ */
+
+/** Leviers artificiels, pour tester l'algorithme sans passer par la grille. */
+function leviers(...specs) {
+  return specs.map(([id, coef, base, confiance = "neutre"]) => ({
+    id, label: id, coef, base, confiance,
+    poids: POIDS_CONFIANCE[confiance], categorie: "epreuve", annee: "terminale",
+  }));
+}
+
+/* --- 12.1 Propriétés fondamentales de l'optimiseur ----------------------- */
+
+test("Optimiseur : objectif déjà atteint → aucun effort", () => {
+  const r = optimiser(leviers(["a", 16, 15], ["b", 8, 15]), 10 * 24);
+  egal(r.faisable, true);
+  egal(r.effort, 0);
+  egal(r.notes.every((n) => n.delta === 0), true);
+});
+
+test("Optimiseur : la contrainte est atteinte, jamais manquée", () => {
+  const requis = 16 * 48;
+  const r = optimiser(leviers(["spe1", 16, 12], ["spe2", 16, 12],
+                              ["philo", 8, 12], ["go", 8, 12]), requis);
+  egal(r.faisable, true);
+  egal(r.pointsObtenus >= requis, true);
+});
+
+test("Optimiseur : à confiance égale, la hausse est proportionnelle au coefficient", () => {
+  const r = optimiser(leviers(["gros", 16, 10], ["petit", 8, 10]), 12 * 24);
+  const gros = r.notes.find((n) => n.id === "gros");
+  const petit = r.notes.find((n) => n.id === "petit");
+  // Δᵢ ∝ cᵢ / wᵢ  →  Δgros / Δpetit = 16 / 8 = 2
+  egal(gros.delta / petit.delta, 2, 0.05);
+});
+
+test("Optimiseur : à coefficient égal, la matière fragile est épargnée", () => {
+  const r = optimiser(leviers(["fort", 8, 10, "fort"], ["fragile", 8, 10, "fragile"]), 14 * 16);
+  const fort = r.notes.find((n) => n.id === "fort");
+  const fragile = r.notes.find((n) => n.id === "fragile");
+  egal(fort.delta > fragile.delta, true);
+  // Δfort / Δfragile = wfragile / wfort = 1,9 / 0,55 ≈ 3,45
+  egal(fort.delta / fragile.delta, POIDS_CONFIANCE.fragile / POIDS_CONFIANCE.fort, 0.15);
+});
+
+test("Optimiseur : saturation à 20 → l'effort bascule sur les autres", () => {
+  // « petit » part de 19,5 : il ne peut donner que 0,5 point de plus
+  const r = optimiser(leviers(["petit", 16, 19.5], ["grand", 8, 8]), 19 * 24);
+  const petit = r.notes.find((n) => n.id === "petit");
+  const grand = r.notes.find((n) => n.id === "grand");
+  egal(petit.note, 20);
+  egal(grand.note > 8, true);
+  egal(r.pointsObtenus >= 19 * 24 - 0.05, true);
+});
+
+test("Optimiseur : objectif hors d'atteinte → faisable = false et manque chiffré", () => {
+  const r = optimiser(leviers(["a", 8, 10]), 8 * 25); // exigerait 25/20
+  egal(r.faisable, false);
+  egal(r.manque > 0, true);
+  egal(r.notes[0].note, 20); // on montre quand même le maximum possible
+});
+
+test("Optimiseur : aucun levier → infaisable si des points restent à trouver", () => {
+  egal(optimiser([], 100).faisable, false);
+  egal(optimiser([], 0).faisable, true);
+});
+
+test("Optimiseur : l'effort croît avec l'objectif", () => {
+  const jeu = () => leviers(["a", 16, 10], ["b", 8, 10]);
+  const facile = optimiser(jeu(), 11 * 24);
+  const dur = optimiser(jeu(), 15 * 24);
+  egal(dur.effort > facile.effort, true);
+  egal(dur.effortMoyen > facile.effortMoyen, true);
+});
+
+test("Optimiseur : les notes restent bornées à 20 et arrondies au dixième", () => {
+  const r = optimiser(leviers(["a", 16, 13], ["b", 8, 13]), 17 * 24);
+  for (const n of r.notes) {
+    egal(n.note <= 20, true);
+    egal(Math.abs(n.note * 10 - Math.round(n.note * 10)) < 1e-9, true);
+  }
+});
+
+/* --- 12.2 Stratégies ----------------------------------------------------- */
+
+test("Stratégies : classées de la moins coûteuse à la plus coûteuse", () => {
+  const jeu = leviers(["a", 16, 10, "fort"], ["b", 16, 10, "fragile"], ["c", 8, 10]);
+  const liste = genererStrategies(jeu, 14 * 40);
+  egal(liste.length >= 2, true);
+  for (let i = 1; i < liste.length; i++) {
+    egal(liste[i].effortMoyen >= liste[i - 1].effortMoyen - 1e-9, true);
+  }
+});
+
+test("Stratégies : « miser sur les coefficients » ignore la confiance", () => {
+  const jeu = leviers(["a", 16, 10, "fort"], ["b", 16, 10, "fragile"]);
+  const coefs = genererStrategies(jeu, 14 * 32).find((s) => s.id === "coefficients");
+  const a = coefs.notes.find((n) => n.id === "a");
+  const b = coefs.notes.find((n) => n.id === "b");
+  egal(a.note, b.note); // même coef, même base → même exigence
+});
+
+test("Stratégies : « jouer tes points forts » charge davantage la matière forte", () => {
+  const jeu = leviers(["fort", 16, 10, "fort"], ["fragile", 16, 10, "fragile"]);
+  const liste = genererStrategies(jeu, 14 * 32);
+  const forces = liste.find((s) => s.id === "forces");
+  const reguliere = liste.find((s) => s.id === "regulier");
+  const ecartForces = forces.notes.find((n) => n.id === "fort").delta
+                    - forces.notes.find((n) => n.id === "fragile").delta;
+  const ecartRegulier = reguliere.notes.find((n) => n.id === "fort").delta
+                      - reguliere.notes.find((n) => n.id === "fragile").delta;
+  egal(ecartForces > ecartRegulier, true);
+});
+
+test("Stratégies : chemins identiques fusionnés (confiance neutre partout)", () => {
+  // Sans écart de confiance, « effort régulier » et « coefficients » coïncident
+  const jeu = leviers(["a", 16, 10], ["b", 8, 10]);
+  const liste = genererStrategies(jeu, 13 * 24);
+  egal(liste.length < 3, true);
+});
+
+/* --- 12.3 Rentabilité, marge, points requis ------------------------------ */
+
+test("Rentabilité : +1 point en coef 16 vaut +0,16 sur la moyenne (total 100)", () => {
+  const classement = classementRentabilite(leviers(["spe1", 16, 10], ["philo", 8, 10]), 100);
+  const spe = classement.find((l) => l.id === "spe1");
+  egal(spe.gainMoyenne, 0.16, 0.0001);
+  egal(spe.gainPoints, 16);
+});
+
+test("Rentabilité : à coefficient égal, le point fort passe devant le fragile", () => {
+  const classement = classementRentabilite(
+    leviers(["fragile", 8, 10, "fragile"], ["fort", 8, 10, "fort"]), 100);
+  egal(classement[0].id, "fort");
+});
+
+test("Rentabilité : une matière déjà à 20 sort du classement", () => {
+  const classement = classementRentabilite(leviers(["plein", 16, 20], ["a", 8, 10]), 100);
+  egal(classement.some((l) => l.id === "plein"), false);
+});
+
+test("Marge de sécurité : élève à 13,15 → 315 points au-dessus de l'admission", () => {
+  const s = calculerSynthese(buildGrille(etatReference(), BAC_DATA), BAC_DATA);
+  const marge = margeSecurite(s, 10);
+  egal(marge.points, (s.moyenneProjetee - 10) * 100, 0.001);
+  egal(margeSecurite(s, 18), null); // seuil non atteint : rien à protéger
+});
+
+test("Points requis : la somme fixes + leviers reconstitue l'objectif", () => {
+  const etat = etatReference();
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const lev = construireLeviers(grille, s, etat);
+  const r = pointsRequis(14, s, lev);
+  egal(r.total, 14 * 100);
+  // Les points fixes = acquis (Première + anticipées) ET projetés (Terminale)
+  egal(r.pointsFixes, s.pointsAcquis + s.pointsProjetes, 0.001);
+  egal(r.coefLeviers, 48);
+  egal(r.coefIgnore, 0); // ici, toute ligne non renseignée est un levier
+  egal(r.pointsFixes + r.surLeviers, 14 * 100, 0.001);
+});
+
+test("Points requis : les lignes ni connues ni leviers prennent l'hypothèse moyenne", () => {
+  const etat = etatReference();
+  etat.notes.ccTerminale.hg = null;   // coef 3 laissé de côté par epreuvesSeules
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const lev = construireLeviers(grille, s, etat, { epreuvesSeules: true });
+  const r = pointsRequis(14, s, lev);
+  egal(r.coefIgnore, 3);
+  egal(r.pointsSupposes, 3 * s.moyenneProjetee, 0.001);
+  // Rien ne doit être compté deux fois ni oublié
+  egal(r.coefFixes + r.coefLeviers + r.coefIgnore, 100);
+});
+
+/* --- 12.4 Construction des leviers --------------------------------------- */
+
+test("Leviers : seules les lignes non renseignées sont des leviers", () => {
+  const etat = etatReference();
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const lev = construireLeviers(grille, s, etat);
+  // Élève de référence : seules les 4 épreuves de Terminale sont vides
+  egal(lev.length, 4);
+  egal(lev.reduce((somme, l) => somme + l.coef, 0), 48);
+  egal(lev[0].coef, 16); // triés par coefficient décroissant
+});
+
+test("Leviers : le niveau de référence reprend la note de Première (même matière)", () => {
+  const etat = etatReference();
+  etat.notes.ccTerminale.hg = null;      // histoire-géo de Terminale à conquérir
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const hg = construireLeviers(grille, s, etat).find((l) => l.id === "hg@terminale");
+  egal(hg.base, 14); // hg@premiere vaut 14 dans l'état de référence
+});
+
+test("Leviers : option epreuvesSeules exclut le contrôle continu", () => {
+  const etat = etatReference();
+  etat.notes.ccTerminale.hg = null;
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  egal(construireLeviers(grille, s, etat).some((l) => l.categorie === "cc"), true);
+  egal(construireLeviers(grille, s, etat, { epreuvesSeules: true })
+        .some((l) => l.categorie === "cc"), false);
+});
+
+test("Leviers : la confiance déclarée est reprise et pondérée", () => {
+  const etat = etatReference();
+  etat.confiance = { philo: "fragile" };
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const philo = construireLeviers(grille, s, etat).find((l) => l.id === "philo");
+  egal(philo.confiance, "fragile");
+  egal(philo.poids, POIDS_CONFIANCE.fragile);
+});
+
+/* --- 12.5 Analyse complète et qualification ------------------------------ */
+
+test("Analyse : objectif 14 atteignable pour l'élève de référence", () => {
+  const etat = etatReference();
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const a = analyserObjectif(14, grille, s, etat);
+  egal(a.meilleure.faisable, true);
+  egal(a.meilleure.pointsObtenus >= a.requis.surLeviers - 0.05, true);
+  egal(a.rentabilite.length > 0, true);
+});
+
+test("Analyse : objectif 20 exige 20 partout et reste faisable de justesse", () => {
+  const etat = etatReference();
+  const grille = buildGrille(etat, BAC_DATA);
+  const s = calculerSynthese(grille, BAC_DATA);
+  const a = analyserObjectif(20, grille, s, etat);
+  // L'élève a déjà des notes < 20 : 20 de moyenne est devenu impossible
+  egal(a.meilleure.faisable, false);
+});
+
+test("Qualification : l'effort est nommé, jamais transformé en probabilité", () => {
+  egal(qualifierEffort(0, true).niveau, "acquis");
+  egal(qualifierEffort(0.5, true).niveau, "accessible");
+  egal(qualifierEffort(1.2, true).niveau, "exigeant");
+  egal(qualifierEffort(2.5, true).niveau, "ambitieux");
+  egal(qualifierEffort(5, true).niveau, "extreme");
+  egal(qualifierEffort(1, false).niveau, "impossible");
 });
 
 /* ============================================================================

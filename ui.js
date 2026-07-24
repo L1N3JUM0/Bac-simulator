@@ -15,6 +15,9 @@ import {
   buildGrille, calculerSynthese, simulerRattrapage, oralsRattrapage,
   paireRattrapageValide,
 } from "./calculator.js";
+import {
+  analyserObjectif, qualifierEffort, LIBELLES_CONFIANCE,
+} from "./optimizer.js";
 
 /* ----------------------------------------------------------------------------
    1. PETITS OUTILS
@@ -1042,8 +1045,18 @@ export function initModaleGraphiques() {
    11. v1.1 — NOTES CIBLES, COMPARATEUR « ET SI ? », RATTRAPAGE
    --------------------------------------------------------------------------- */
 
-/** Les 4 épreuves de Terminale, cibles du mode manuel. */
-const IDS_CIBLES = ["spe1", "spe2", "philo", "grand-oral"];
+/**
+ * v1.3 — Le comparateur « Et si… » couvre désormais TOUTES les épreuves,
+ * anticipées comprises. Un élève de Première veut pouvoir tester « et si
+ * j'avais eu 15 au français ? » : s'en tenir aux 4 épreuves de Terminale
+ * privait le simulateur de la moitié de son public.
+ *
+ * Les épreuves déjà notées restent affichées : la cible sert alors à simuler
+ * une note différente de celle obtenue (utile avant les résultats officiels).
+ */
+function idsCibles(data) {
+  return data.epreuvesTerminales.map((e) => e.id);
+}
 
 /**
  * Construit UNE FOIS les champs de notes cibles (écran Résultats).
@@ -1054,14 +1067,15 @@ export function initCibles(state, data, onChange) {
   const conteneur = $("#liste-cibles");
   conteneur.innerHTML = "";
 
-  for (const id of IDS_CIBLES) {
+  for (const id of idsCibles(data)) {
     const ep = data.epreuvesTerminales.find((e) => e.id === id);
+    const anticipee = ep.annee === "premiere";
     const ligne = document.createElement("div");
     ligne.className = "note-row note-row--projete card card--flat";
     ligne.innerHTML = `
       <div class="note-row__info">
         <p class="note-row__label" id="lbl-cible-${id}"></p>
-        <p class="note-row__meta">Coef ${ep.coef} · Note visée</p>
+        <p class="note-row__meta">Coef ${ep.coef} · ${anticipee ? "Épreuve anticipée" : "Note visée"}</p>
       </div>
       <div class="note-row__input">
         <input type="text" inputmode="decimal" placeholder="—" id="cible-${id}"
@@ -1090,12 +1104,12 @@ export function majLabelsCibles(state, data) {
   const labels = {
     spe1: conserves[0] ? nomSpe(conserves[0]) : "Spécialité 1",
     spe2: conserves[1] ? nomSpe(conserves[1]) : "Spécialité 2",
-    philo: "Philosophie",
-    "grand-oral": "Grand oral",
   };
-  for (const id of IDS_CIBLES) {
+  for (const id of idsCibles(data)) {
     const element = document.getElementById(`lbl-cible-${id}`);
-    if (element) element.textContent = labels[id];
+    if (!element) continue;
+    const ep = data.epreuvesTerminales.find((e) => e.id === id);
+    element.textContent = labels[id] || (ep ? ep.label : id);
   }
 }
 
@@ -1117,7 +1131,7 @@ function renderComparateur(state, resultats, data) {
     ...state,
     notes: { ...state.notes, epreuves: { ...state.notes.epreuves } },
   };
-  for (const id of IDS_CIBLES) {
+  for (const id of idsCibles(data)) {
     if (state.cibles[id] !== undefined) clone.notes.epreuves[id] = state.cibles[id];
   }
   const b = calculerSynthese(buildGrille(clone, data), data);
@@ -1241,4 +1255,248 @@ function renderRattrapage(state, resultats, data) {
       ✗ Même avec 20/20 aux deux oraux, ces matières ne suffisent pas —
       essaie une combinaison à plus forts coefficients.</div>`;
   }
+}
+
+/* ----------------------------------------------------------------------------
+   12. v1.3 — ÉCRAN STRATÉGIE
+   ---------------------------------------------------------------------------
+   Tout le calcul vient d'optimizer.js. Cette section ne fait qu'afficher, et
+   surtout : elle EXPLIQUE. Un chiffre sans raisonnement ne sert à rien à un
+   élève — chaque chemin proposé dit d'où il vient.
+   --------------------------------------------------------------------------- */
+
+/** Objectif actuellement optimisé (indépendant de l'objectif du profil).
+    Conservé dans state.ui pour survivre à un rechargement de la page. */
+let objectifStrategie = null;
+
+/** Référence à l'état courant, pour les écouteurs construits une seule fois. */
+let etatCourant = null;
+
+/** Rend l'écran Stratégie complet. */
+export function renderStrategie(state, resultats, data, onChange) {
+  const conteneur = $("#ecran-strategie");
+  if (!conteneur) return;
+
+  const seuils = data.mentions.map((m) => m.seuil).filter((s) => s >= 10);
+  if (objectifStrategie === null) {
+    objectifStrategie = Number(state.ui.objectifStrategie)
+      || Number(state.profil.objectif) || 12;
+  }
+  if (!seuils.includes(objectifStrategie)) seuils.push(objectifStrategie);
+  seuils.sort((a, b) => a - b);
+
+  etatCourant = state;
+  renderObjectifsStrategie(seuils, data, onChange);
+
+  const analyse = analyserObjectif(
+    objectifStrategie, resultats.grille, resultats.synthese, state
+  );
+
+  renderRequis(analyse, resultats.synthese);
+  renderConfiance(analyse, state, onChange);
+  renderChemins(analyse);
+  renderRentabilite(analyse, resultats.synthese);
+}
+
+/** Sélecteur d'objectif : on optimise pour n'importe quelle mention. */
+function renderObjectifsStrategie(seuils, data, onChange) {
+  const zone = $("#strategie-objectifs");
+  if (!zone || zone.dataset.construit === "1") {
+    if (zone) majSelectionObjectif(zone);
+    return;
+  }
+  zone.innerHTML = "";
+  for (const seuil of seuils) {
+    const mention = data.mentions.find((m) => m.seuil === seuil);
+    const label = document.createElement("label");
+    label.className = "chip";
+    label.innerHTML = `<input type="radio" name="strategie-objectif" value="${seuil}">
+      <span>${mention ? mention.court : `${seuil}/20`} <small>≥ ${seuil}</small></span>`;
+    label.querySelector("input").addEventListener("change", () => {
+      objectifStrategie = seuil;
+      etatCourant.ui.objectifStrategie = seuil;   // mémorisé d'une visite à l'autre
+      onChange();
+    });
+    zone.appendChild(label);
+  }
+  zone.dataset.construit = "1";
+  majSelectionObjectif(zone);
+}
+
+function majSelectionObjectif(zone) {
+  for (const entree of zone.querySelectorAll("input")) {
+    entree.checked = Number(entree.value) === objectifStrategie;
+  }
+}
+
+/** Rappel chiffré de ce qu'il reste à aller chercher. */
+function renderRequis(analyse, synthese) {
+  const zone = $("#strategie-requis");
+  if (!zone) return;
+
+  const { requis } = analyse;
+  if (requis.coefLeviers === 0) {
+    zone.textContent = "Toutes tes notes sont saisies : il n'y a plus rien à optimiser.";
+    return;
+  }
+  const moyenneNecessaire = requis.surLeviers / requis.coefLeviers;
+  if (requis.surLeviers <= 0) {
+    zone.textContent = `Objectif déjà tenu par tes notes actuelles : `
+      + `${entier(requis.pointsFixes)} points sont acquis ou projetés sur les `
+      + `${entier(requis.total)} nécessaires.`;
+    return;
+  }
+  zone.textContent =
+    `Il te reste ${entier(requis.surLeviers)} points à aller chercher sur `
+    + `${requis.coefLeviers} coefficients, soit ${fmt(moyenneNecessaire, 2)} de moyenne `
+    + `sur ce qu'il te reste à passer.`;
+}
+
+/** Curseur de confiance : trois crans par matière encore en jeu. */
+function renderConfiance(analyse, state, onChange) {
+  const zone = $("#liste-confiance");
+  if (!zone) return;
+
+  /* Reconstruction complète seulement si la liste des leviers a changé —
+     sinon on perd le focus à chaque clic. */
+  const empreinte = analyse.leviers.map((l) => l.id).join("|");
+  if (zone.dataset.empreinte === empreinte) {
+    for (const groupe of zone.querySelectorAll("[data-levier]")) {
+      const courant = state.confiance[groupe.dataset.levier] || "neutre";
+      for (const bouton of groupe.querySelectorAll("button")) {
+        const actif = bouton.dataset.niveau === courant;
+        bouton.classList.toggle("is-actif", actif);
+        bouton.setAttribute("aria-pressed", String(actif));
+      }
+    }
+    return;
+  }
+
+  zone.innerHTML = "";
+  if (analyse.leviers.length === 0) {
+    zone.innerHTML = `<p class="ecran__sub">Plus aucune note à venir : tout est déjà saisi.</p>`;
+    zone.dataset.empreinte = empreinte;
+    return;
+  }
+
+  for (const levier of analyse.leviers) {
+    const ligne = document.createElement("div");
+    ligne.className = "confiance-row";
+    ligne.dataset.levier = levier.id;
+
+    const niveaux = ["fort", "neutre", "fragile"].map((niveau) => {
+      const actif = (state.confiance[levier.id] || "neutre") === niveau;
+      return `<button type="button" class="confiance-btn${actif ? " is-actif" : ""}"
+        data-niveau="${niveau}" aria-pressed="${actif}">${LIBELLES_CONFIANCE[niveau]}</button>`;
+    }).join("");
+
+    ligne.innerHTML = `
+      <div class="confiance-row__info">
+        <p class="confiance-row__label">${levier.label}</p>
+        <p class="confiance-row__meta">Coef ${levier.coef} · niveau de départ estimé ${fmt(levier.base, 1)}</p>
+      </div>
+      <div class="confiance-row__choix" role="group"
+           aria-label="Niveau en ${levier.label}">${niveaux}</div>`;
+
+    ligne.querySelectorAll("button").forEach((bouton) => {
+      bouton.addEventListener("click", () => {
+        state.confiance[levier.id] = bouton.dataset.niveau;
+        onChange();
+        /* Le focus reste sur le bouton cliqué : la liste n'est pas reconstruite */
+        bouton.focus();
+      });
+    });
+    zone.appendChild(ligne);
+  }
+  zone.dataset.empreinte = empreinte;
+}
+
+/** Les trois chemins, du plus facile au plus exigeant. */
+function renderChemins(analyse) {
+  const zone = $("#liste-strategies");
+  if (!zone) return;
+  zone.innerHTML = "";
+
+  if (analyse.leviers.length === 0) {
+    zone.innerHTML = `<p class="ecran__sub">Aucun levier disponible.</p>`;
+    return;
+  }
+
+  analyse.strategies.forEach((strategie, rang) => {
+    const effort = qualifierEffort(strategie.effortMoyen, strategie.faisable);
+    const carte = document.createElement("article");
+    carte.className = `strat card card--flat strat--${effort.niveau}`
+      + (rang === 0 && strategie.faisable ? " strat--recommandee" : "");
+
+    const titres = [strategie.label, ...(strategie.labelsFusionnes || [])].join(" · ");
+
+    const lignes = strategie.notes
+      .slice()
+      .sort((a, b) => b.coef - a.coef)
+      .map((n) => {
+        const signe = n.delta > 0.05 ? `+${fmt(n.delta, 1)}` : "=";
+        return `<li class="strat__note">
+          <span class="strat__matiere">${n.label}</span>
+          <span class="strat__meta">coef ${n.coef}</span>
+          <strong class="strat__valeur num">${fmt(n.note, 1)}</strong>
+          <span class="strat__delta">${signe}</span>
+        </li>`;
+      }).join("");
+
+    const entete = rang === 0 && strategie.faisable
+      ? `<p class="strat__rang">Chemin le plus facile</p>` : "";
+
+    const verdict = strategie.faisable
+      ? `<p class="strat__detail">${effort.detail}</p>`
+      : `<p class="strat__detail">Il manque ${entier(strategie.manque)} points, `
+        + `même avec 20 partout.</p>`;
+
+    carte.innerHTML = `
+      ${entete}
+      <header class="strat__entete">
+        <h3 class="strat__titre">${titres}</h3>
+        <span class="strat__badge strat__badge--${effort.niveau}">${effort.label}</span>
+      </header>
+      <p class="strat__description">${strategie.description}</p>
+      <ul class="strat__notes">${lignes}</ul>
+      ${verdict}`;
+    zone.appendChild(carte);
+  });
+}
+
+/** Classement de rentabilité : où un point rapporte le plus. */
+function renderRentabilite(analyse, synthese) {
+  const zone = $("#liste-rentabilite");
+  if (!zone) return;
+  zone.innerHTML = "";
+
+  const medailles = ["🥇", "🥈", "🥉"];
+  const top = analyse.rentabilite.slice(0, 5);
+
+  for (const [rang, levier] of top.entries()) {
+    const element = document.createElement("li");
+    element.className = "rentab__item";
+    element.innerHTML = `
+      <span class="rentab__rang" aria-hidden="true">${medailles[rang] || "•"}</span>
+      <span class="rentab__label">${levier.label}
+        <small>coef ${levier.coef} · ${LIBELLES_CONFIANCE[levier.confiance].toLowerCase()}</small></span>
+      <span class="rentab__gain">+1 point&nbsp;=&nbsp;<strong>+${fmt(levier.gainMoyenne, 2)}</strong>
+        <small>sur ta moyenne</small></span>`;
+    zone.appendChild(element);
+  }
+
+  const note = $("#rentab-note");
+  if (!note) return;
+  if (top.length === 0) {
+    note.textContent = "";
+    return;
+  }
+  const premier = top[0];
+  const dernier = top[top.length - 1];
+  const rapport = dernier.rendement > 0 ? premier.rendement / dernier.rendement : 1;
+  note.textContent = rapport > 1.2
+    ? `À effort égal, un point gagné en ${premier.label} te rapporte `
+      + `${fmt(rapport, 1)} fois plus qu'en ${dernier.label}.`
+    : `Tes matières restantes ont un rendement comparable : aucune ne mérite `
+      + `d'être sacrifiée aux autres.`;
 }

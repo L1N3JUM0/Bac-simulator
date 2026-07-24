@@ -1067,3 +1067,154 @@ input.is-invalid { border-color: var(--marge) !important; }
   .chip input:checked + span,
   .note-row.is-validee { animation: none; }
 }
+
+/* ----------------------------------------------------------------------------
+   17. ÉCRAN STRATÉGIE (v1.3)
+   --------------------------------------------------------------------------- */
+
+.strat__requis {
+  margin: 10px 0 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+/* --- Curseur de confiance --- */
+.confiance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.confiance-row:last-child { border-bottom: 0; }
+.confiance-row__info { min-width: 0; flex: 1 1 150px; }
+.confiance-row__label { margin: 0; font-weight: 700; font-size: 14.5px; }
+.confiance-row__meta { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+
+.confiance-row__choix {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.confiance-btn {
+  border: 0;
+  background: transparent;
+  padding: 7px 11px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.confiance-btn + .confiance-btn { border-left: 1px solid var(--line); }
+.confiance-btn:hover { background: var(--surface); }
+.confiance-btn.is-actif { background: var(--accent); color: var(--accent-ink); }
+
+/* --- Cartes de chemin --- */
+.strat { margin-bottom: 12px; border-left: 3px solid var(--line); }
+.strat:last-child { margin-bottom: 0; }
+.strat--recommandee { border-left-color: var(--accent); }
+.strat--impossible { border-left-color: var(--marge); opacity: 0.75; }
+
+.strat__rang {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.strat__entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.strat__titre { margin: 0; font-size: 16px; }
+.strat__description {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.strat__detail {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.strat__badge {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+.strat__badge--acquis,
+.strat__badge--accessible { background: var(--surface-2); }
+.strat__badge--acquis,
+.strat__badge--accessible { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.strat__badge--exigeant   { background: var(--accent-soft); color: var(--accent); }
+.strat__badge--ambitieux,
+.strat__badge--extreme,
+.strat__badge--impossible { background: var(--surface-2); }
+.strat__badge--ambitieux,
+.strat__badge--extreme,
+.strat__badge--impossible { background: color-mix(in srgb, var(--marge) 14%, transparent); color: var(--marge); }
+
+.strat__notes { list-style: none; margin: 0; padding: 0; }
+.strat__note {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.strat__matiere { min-width: 0; overflow-wrap: anywhere; }
+.strat__meta { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.strat__valeur { font-size: 15.5px; }
+.strat__delta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-2);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* --- Classement de rentabilité --- */
+.rentab { list-style: none; margin: 0; padding: 0; }
+.rentab__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rentab__item:last-child { border-bottom: 0; }
+.rentab__rang { font-size: 18px; width: 24px; text-align: center; }
+.rentab__label { flex: 1 1 auto; min-width: 0; font-weight: 700; font-size: 14px; }
+.rentab__label small {
+  display: block;
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.rentab__gain { text-align: right; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.rentab__gain strong { font-size: 14.5px; color: var(--accent); }
+.rentab__gain small { display: block; font-size: 10.5px; }
+
+@media (max-width: 420px) {
+  .strat__note { grid-template-columns: 1fr auto auto; }
+  .strat__meta { display: none; }
+}
